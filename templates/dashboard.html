@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard | GitHub Issues Dashboard{% endblock %}
+
+{% macro render_labels(labels) %}
+    {% set label_list = [] %}
+    {% if labels %}
+        {% if labels is string %}
+            {% set label_list = [labels] %}
+        {% elif labels is mapping %}
+            {% set label_list = [labels] %}
+        {% else %}
+            {% set label_list = labels %}
+        {% endif %}
+        <div class="d-flex flex-wrap align-items-center">
+            {% for label in label_list %}
+                {% if label is mapping %}
+                    {% set label_name = label.get('name') or label.get('label') %}
+                {% else %}
+                    {% set label_name = label %}
+                {% endif %}
+                <span class="badge badge-pill badge-secondary mr-1 mb-1">{{ label_name }}</span>
+            {% endfor %}
+        </div>
+    {% else %}
+        <span class="text-muted">None</span>
+    {% endif %}
+{% endmacro %}
+
+{% macro render_users(users) %}
+    {% set user_list = [] %}
+    {% if users %}
+        {% if users is string %}
+            {% set user_list = [users] %}
+        {% elif users is mapping %}
+            {% set user_list = [users] %}
+        {% else %}
+            {% set user_list = users %}
+        {% endif %}
+        <div class="d-flex flex-wrap align-items-center">
+            {% for user in user_list %}
+                {% if user is mapping %}
+                    {% set login = user.get('login') or user.get('user_login') %}
+                {% else %}
+                    {% set login = user %}
+                {% endif %}
+                {% if login %}
+                    <a href="https://github.com/{{ login }}" target="_blank" class="badge badge-light mr-1 mb-1">@{{ login }}</a>
+                {% endif %}
+            {% endfor %}
+        </div>
+    {% else %}
+        <span class="text-muted">None</span>
+    {% endif %}
+{% endmacro %}
+
+{% macro work_item_author(item) %}
+    {% if item.user_login %}
+        <a href="https://github.com/{{ item.user_login }}" target="_blank">@{{ item.user_login }}</a>
+    {% elif item.user is mapping %}
+        <a href="https://github.com/{{ item.user.login }}" target="_blank">@{{ item.user.login }}</a>
+    {% elif item.user %}
+        <a href="https://github.com/{{ item.user }}" target="_blank">@{{ item.user }}</a>
+    {% elif item.author is mapping %}
+        <a href="https://github.com/{{ item.author.login }}" target="_blank">@{{ item.author.login }}</a>
+    {% elif item.author %}
+        <a href="https://github.com/{{ item.author }}" target="_blank">@{{ item.author }}</a>
+    {% else %}
+        <span class="text-muted">Unknown</span>
+    {% endif %}
+{% endmacro %}
+
+{% block content %}
+
+{% if sync_error %}
+    <div class="alert alert-warning">
+        <strong>Sync service unavailable.</strong> The dashboard could not reach
+        <code>{{ sync_base_url }}</code>. Latest error: {{ sync_error }}.
+        Check that the service is online and <code>SYNC_SERVICE_URL</code> points to the correct endpoint.
+    </div>
+{% endif %}
+
+{% if not active_repo %}
+    <div class="alert alert-info">
+        Select a repository from the navigation bar to load issues or pull requests.
+    </div>
+{% else %}
+    <div class="card shadow-sm mb-4">
+        <div class="card-body d-flex flex-column flex-md-row justify-content-between align-items-md-center">
+            <div class="mb-3 mb-md-0">
+                <h2 class="h4 mb-1">{{ active_repo.display_name or active_repo.repo }}</h2>
+                <div class="text-muted small">{{ active_repo.repo }}</div>
+            </div>
+            <div class="btn-group" role="group" aria-label="Data type selector">
+                <a class="btn {% if data_type == 'issues' %}btn-primary{% else %}btn-outline-primary{% endif %}" href="{{ url_for('dashboard', repo=selected_repo, type='issues', state=state) }}">Issues</a>
+                <a class="btn {% if data_type == 'prs' %}btn-primary{% else %}btn-outline-primary{% endif %}" href="{{ url_for('dashboard', repo=selected_repo, type='prs', state=state) }}">Pull Requests</a>
+            </div>
+            <div class="btn-group ml-md-3" role="group" aria-label="State selector">
+                <a class="btn {% if state == 'open' %}btn-outline-success active{% else %}btn-outline-success{% endif %}" href="{{ url_for('dashboard', repo=selected_repo, type=data_type, state='open') }}">Open</a>
+                <a class="btn {% if state == 'closed' %}btn-outline-secondary active{% else %}btn-outline-secondary{% endif %}" href="{{ url_for('dashboard', repo=selected_repo, type=data_type, state='closed') }}">Closed</a>
+                <a class="btn {% if state == 'all' %}btn-outline-dark active{% else %}btn-outline-dark{% endif %}" href="{{ url_for('dashboard', repo=selected_repo, type=data_type, state='all') }}">All</a>
+            </div>
+            <a class="btn btn-link ml-md-3" href="https://github.com/{{ active_repo.repo }}" target="_blank">View on GitHub</a>
+        </div>
+    </div>
+
+    {% if data_error %}
+        <div class="alert alert-warning">{{ data_error }}</div>
+    {% elif work_items %}
+        <div class="card shadow-sm">
+            <div class="card-body table-responsive">
+                <table class="table table-striped table-hover align-middle">
+                    <thead class="thead-light">
+                        <tr>
+                            <th scope="col" class="text-nowrap">#</th>
+                            <th scope="col" style="min-width: 260px;">Title</th>
+                            <th scope="col">State</th>
+                            <th scope="col" style="min-width: 180px;">Labels</th>
+                            {% if data_type == 'prs' %}
+                                <th scope="col">Author</th>
+                                <th scope="col">Reviewers</th>
+                                <th scope="col">Updated</th>
+                            {% else %}
+                                <th scope="col">Author</th>
+                                <th scope="col" style="min-width: 160px;">Assignees</th>
+                                <th scope="col">Updated</th>
+                            {% endif %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in work_items %}
+                            <tr>
+                                <td><a href="{{ item.html_url or item.get('url') }}" target="_blank">#{{ item.number }}</a></td>
+                                <td class="align-middle">{{ item.title }}</td>
+                                <td class="align-middle text-nowrap text-capitalize">{{ item.state }}</td>
+                                <td class="align-middle">{{ render_labels(item.labels) }}</td>
+                                {% if data_type == 'prs' %}
+                                    <td class="align-middle">{{ work_item_author(item) }}</td>
+                                    <td class="align-middle">{{ render_users(item.requested_reviewers or item.reviewers) }}</td>
+                                    <td class="align-middle text-nowrap">{{ item.updated_at or item.updated }}</td>
+                                {% else %}
+                                    <td class="align-middle">{{ work_item_author(item) }}</td>
+                                    <td class="align-middle">{{ render_users(item.assignees if item.assignees is defined else [item.assignee] if item.assignee else []) }}</td>
+                                    <td class="align-middle text-nowrap">{{ item.updated_at or item.updated }}</td>
+                                {% endif %}
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% else %}
+        <div class="alert alert-secondary">No items matched the selected filters.</div>
+    {% endif %}
+{% endif %}
+{% endblock %}

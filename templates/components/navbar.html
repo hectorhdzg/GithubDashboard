@@ -1,0 +1,60 @@
+{% set repo_groups = grouped_repositories if grouped_repositories is defined else {} %}
+{% set current_type = data_type if data_type is defined else 'issues' %}
+{% set current_state = state if state is defined else 'open' %}
+{% set current_repo = selected_repo if selected_repo is defined else '' %}
+
+{% macro count_open(repo, kind) %}
+    {% set value = 0 %}
+    {% if kind == 'issues' %}
+        {% set value = repo.issues_open or repo.open_issues or repo.open_issues_count or (repo.issues.open if repo.issues is mapping else 0) %}
+    {% else %}
+        {% set value = repo.prs_open or repo.open_prs or repo.open_prs_count or (repo.pull_requests.open if repo.pull_requests is mapping else 0) %}
+    {% endif %}
+    {{ value or 0 }}
+{% endmacro %}
+
+<nav class="navbar navbar-expand-lg navbar-dark navbar-custom">
+    <div class="container">
+        <a class="navbar-brand" href="{{ url_for('dashboard') }}">
+            <i class="fas fa-bug"></i> Azure Monitor TelReach GitHub
+        </a>
+
+        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav mr-auto">
+                {% if repo_groups %}
+                    {% for language, categories in repo_groups.items() %}
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" id="nav-{{ loop.index }}" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                                {{ language }}
+                            </a>
+                            <div class="dropdown-menu" aria-labelledby="nav-{{ loop.index }}">
+                                {% for category, repos in categories.items() %}
+                                    <h6 class="dropdown-header">{{ category }}</h6>
+                                    {% for repo in repos %}
+                                        <a class="dropdown-item{% if current_repo == repo.repo %} active{% endif %}" href="{{ url_for('dashboard', repo=repo.repo, type=current_type, state=current_state) }}">
+                                            {{ repo.display_name or repo.repo }}
+                                            <span class="badge badge-light ml-2">{{ count_open(repo, 'issues') }}</span>
+                                        </a>
+                                    {% endfor %}
+                                    {% if not loop.last %}
+                                        <div class="dropdown-divider"></div>
+                                    {% endif %}
+                                {% endfor %}
+                            </div>
+                        </li>
+                    {% endfor %}
+                {% else %}
+                    <li class="nav-item">
+                        <span class="nav-link text-muted">No repositories loaded</span>
+                    </li>
+                {% endif %}
+            </ul>
+
+            <ul class="navbar-nav ml-auto"></ul>
+        </div>
+    </div>
+</nav>
