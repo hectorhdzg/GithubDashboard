@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.eggs/
+*.egg
+.installed.cfg
+.pytest_cache/
+.coverage*
+dist/
+build/
+src/__pycache__/
+
+# Environments
+.venv/
+.env/
+env/
+venv/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editors/OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Coverage & reports
+htmlcov/
+coverage.xml
+
+# Misc generated
+*.pid
+*.seed
+

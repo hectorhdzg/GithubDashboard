@@ -1,11 +1,18 @@
 {% extends "base.html" %}
+{% from "components/work_items_table.html" import render_work_items_table %}
 
 {% block title %}{{ repository.display_name or repository.repo }} Pull Requests | GitHub Issues Dashboard{% endblock %}
+
+{% block extra_head %}
+{{ super() }}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/work_items_table.css') }}">
+{% endblock %}
 
 {% block content %}
 <div class="page-header mb-4">
     <h1 class="h3 mb-0">{{ repository.display_name or repository.repo }}</h1>
-    <p class="text-muted mb-0">Pull requests fetched from the sync service.</p>
+    <p class="text-muted mb-1">Pull requests fetched from the sync service.</p>
+    <span class="badge badge-success">Viewing Pull Requests</span>
 </div>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -13,7 +20,7 @@
         <a class="btn btn-sm btn-outline-secondary" href="/repositories">&laquo; Back to repositories</a>
         <a class="btn btn-sm btn-outline-primary ml-2" href="/repositories/{{ repository.repo }}/issues">View issues</a>
     </div>
-    <div class="btn-group" role="group" aria-label="Pull request state filter">
+    <div class="btn-group btn-toggle-group btn-group-sm" role="group" aria-label="Pull request state filter">
         {% for option in ['open', 'closed', 'all'] %}
             <a class="btn btn-sm {{ 'btn-primary' if state == option else 'btn-outline-primary' }}" href="?state={{ option }}">{{ option|capitalize }}</a>
         {% endfor %}
@@ -21,33 +28,21 @@
 </div>
 
 {% if pull_requests %}
-<div class="table-responsive shadow-sm">
-    <table class="table table-striped table-hover">
-        <thead class="thead-light">
-            <tr>
-                <th scope="col" style="width: 70px;">#</th>
-                <th scope="col">Title</th>
-                <th scope="col" style="width: 120px;">State</th>
-                <th scope="col" style="width: 120px;">Author</th>
-                <th scope="col" style="width: 160px;">Updated</th>
-                <th scope="col" style="width: 160px;">Created</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for pr in pull_requests %}
-            <tr>
-                <td><a href="{{ pr.html_url or pr.url }}" target="_blank">#{{ pr.number }}</a></td>
-                <td><strong>{{ pr.title }}</strong></td>
-                <td>{{ pr.state|capitalize }}</td>
-                <td>{{ pr.user_login or pr.user.login if pr.user is mapping else pr.user }}</td>
-                <td>{{ pr.updated_at or pr.updated }}</td>
-                <td>{{ pr.created_at or pr.created }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
+    {% set active_repo = {'repo': repository.repo, 'display_name': repository.display_name or repository.repo} %}
+    {{ render_work_items_table(active_repo, pull_requests, 'prs') }}
 {% else %}
     <div class="alert alert-info">No pull requests match the current filters.</div>
 {% endif %}
+{% endblock %}
+
+{% block extra_scripts %}
+{{ super() }}
+<script src="{{ url_for('static', filename='js/work_items_table.js') }}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        if (window.WorkItemsTable && typeof window.WorkItemsTable.init === 'function') {
+            window.WorkItemsTable.init();
+        }
+    });
+</script>
 {% endblock %}

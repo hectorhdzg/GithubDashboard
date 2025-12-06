@@ -6,16 +6,31 @@
 {% macro count_open(repo, kind) %}
     {% set value = 0 %}
     {% if kind == 'issues' %}
-        {% set value = repo.issues_open or repo.open_issues or repo.open_issues_count or (repo.issues.open if repo.issues is mapping else 0) %}
+        {% set value = (
+            repo.issues_open
+            or repo.open_issues
+            or repo.open_issues_count
+            or repo.issue_count
+            or repo.issueCount
+            or (repo.issues.open if repo.issues is mapping else 0)
+        ) %}
     {% else %}
-        {% set value = repo.prs_open or repo.open_prs or repo.open_prs_count or (repo.pull_requests.open if repo.pull_requests is mapping else 0) %}
+        {% set value = (
+            repo.prs_open
+            or repo.open_prs
+            or repo.open_prs_count
+            or repo.pr_count
+            or repo.pull_request_count
+            or repo.pullRequestCount
+            or (repo.pull_requests.open if repo.pull_requests is mapping else 0)
+        ) %}
     {% endif %}
     {{ value or 0 }}
 {% endmacro %}
 
 <nav class="navbar navbar-expand-lg navbar-dark navbar-custom">
     <div class="container">
-        <a class="navbar-brand" href="{{ url_for('dashboard') }}">
+        <a class="navbar-brand" href="{{ url_for('home') }}">
             <i class="fas fa-bug"></i> Azure Monitor TelReach GitHub
         </a>
 
@@ -25,6 +40,11 @@
 
         <div class="collapse navbar-collapse" id="navbarNav">
             <ul class="navbar-nav mr-auto">
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ url_for('favorites') }}">
+                        <i class="fas fa-user-check"></i> Following
+                    </a>
+                </li>
                 {% if repo_groups %}
                     {% for language, categories in repo_groups.items() %}
                         <li class="nav-item dropdown">
@@ -33,11 +53,12 @@
                             </a>
                             <div class="dropdown-menu" aria-labelledby="nav-{{ loop.index }}">
                                 {% for category, repos in categories.items() %}
-                                    <h6 class="dropdown-header">{{ category }}</h6>
+                                    <h6 class="dropdown-header" style="color: {{ category_color(category) }}; font-weight: 700;">{{ category }}</h6>
                                     {% for repo in repos %}
-                                        <a class="dropdown-item{% if current_repo == repo.repo %} active{% endif %}" href="{{ url_for('dashboard', repo=repo.repo, type=current_type, state=current_state) }}">
+                                        {% set open_total = (count_open(repo, 'issues')|int + count_open(repo, 'prs')|int) %}
+                                        <a class="dropdown-item repo-item{% if current_repo == repo.repo %} active{% endif %}" style="--cat-color: {{ category_color(category) }}; --cat-bg: {{ category_color(category) }}1a;" href="{{ url_for('dashboard', repo=repo.repo, type=current_type, state=current_state) }}">
                                             {{ repo.display_name or repo.repo }}
-                                            <span class="badge badge-light ml-2">{{ count_open(repo, 'issues') }}</span>
+                                            <span class="badge badge-light ml-2" title="Open items">{{ open_total }}</span>
                                         </a>
                                     {% endfor %}
                                     {% if not loop.last %}
@@ -53,8 +74,6 @@
                     </li>
                 {% endif %}
             </ul>
-
-            <ul class="navbar-nav ml-auto"></ul>
         </div>
     </div>
 </nav>

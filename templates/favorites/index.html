@@ -1,60 +1,41 @@
 {% extends "base.html" %}
 
-{% block title %}Favorites | GitHub Issues Dashboard{% endblock %}
+{% block title %}Followed Items | GitHub Issues Dashboard{% endblock %}
 
 {% block extra_head %}
+{{ super() }}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma-toast@2.4.2/dist/bulma-toast.min.css">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/work_items_table.css') }}">
 {% endblock %}
 
 {% block content %}
 <div class="page-header mb-4 d-flex justify-content-between align-items-center">
     <div>
-        <h1 class="h3 mb-0">Pinned Work Items</h1>
-        <p class="text-muted mb-0">Favorites are stored locally in your browser. Toggle the star on any issue or pull request to add it here.</p>
+        <h1 class="h3 mb-0">Followed Work Items</h1>
+        <p class="text-muted mb-0">Follows are stored locally in your browser. Click the bookmark icon on any issue or pull request to add it here.</p>
     </div>
-    <button class="btn btn-outline-danger" id="clear-favorites">Clear all</button>
+    <button class="btn btn-outline-danger" id="clear-followed">Clear all</button>
 </div>
 
 <div class="card shadow-sm mb-4">
     <div class="card-header">
-        <i class="fas fa-star mr-2"></i>Your favorites
+        <i class="fas fa-user-check mr-2"></i>Your followed items
     </div>
-    <div class="card-body" id="favorites-container">
-        <div class="alert alert-info mb-0">Loading favorites…</div>
+    <div class="card-body">
+        <div class="work-items-table">
+            <div class="work-items-table-wrapper">
+                <div id="followed-container">
+                    <div class="alert alert-info mb-0">Loading followed items…</div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
-<div class="card shadow-sm">
-    <div class="card-header">
-        <i class="fas fa-layer-group mr-2"></i>Browse repositories
-    </div>
-    <div class="card-body">
-        {% if grouped_repositories %}
-            <div class="row">
-                {% for language, categories in grouped_repositories.items() %}
-                    <div class="col-md-6 mb-4">
-                        <h2 class="h5">{{ language }}</h2>
-                        {% for category, repos in categories.items() %}
-                            <h3 class="h6 text-muted">{{ category }}</h3>
-                            <ul class="list-unstyled mb-3">
-                                {% for repo in repos %}
-                                    <li>
-                                        <a href="/repositories/{{ repo.repo }}/issues">{{ repo.display_name or repo.repo }}</a>
-                                        <span class="text-muted small">({{ repo.repo }})</span>
-                                    </li>
-                                {% endfor %}
-                            </ul>
-                        {% endfor %}
-                    </div>
-                {% endfor %}
-            </div>
-        {% else %}
-            <p class="text-muted mb-0">Repository metadata is currently unavailable.</p>
-        {% endif %}
-    </div>
-</div>
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{{ url_for('static', filename='js/favorites.js') }}?v={{ range(1000, 9999) | random }}"></script>
+{{ super() }}
+<script src="{{ url_for('static', filename='js/work_items_table.js') }}?v={{ range(1000, 9999) | random }}"></script>
+<script src="{{ url_for('static', filename='js/followed.js') }}?v={{ range(1000, 9999) | random }}"></script>
 {% endblock %}

@@ -14,6 +14,9 @@ class DashboardSPA {
             isLoading: false,
             cache: new Map()
         };
+
+        this.favoritesKey = 'dashboardFavorites';
+        this.favorites = this.loadFavorites();
         
         this.languageOverrides = new Map([
             ['azure/azure-sdk-for-js', 'Node.js'],
@@ -33,7 +36,7 @@ class DashboardSPA {
         this.browserLanguageKeywords = ['browser', 'react', 'react-native', 'angular', 'web', 'frontend', 'front-end', 'ui', 'spa'];
 
         this.isInitializing = false; // Flag to prevent URL updates during initialization
-        
+
         this.init();
     }
     
@@ -127,21 +130,20 @@ class DashboardSPA {
                 }
                 return false;
             }
-            
-            // Also handle dropdown items without onclick (fallback)
-            if (e.target.matches('.dropdown-item') && e.target.textContent.trim() !== '') {
-                const dropdownMenu = e.target.closest('.dropdown-menu');
-                if (dropdownMenu && dropdownMenu.id.includes('-dropdown-menu')) {
-                    console.log('Dropdown item clicked (fallback):', e.target.textContent);
-                    e.preventDefault();
-                    // This is a fallback - the onclick handler should handle it
-                }
-            }
         });
         
         // Browser back/forward buttons
         window.addEventListener('popstate', (e) => {
             this.handlePopState(e);
+        });
+
+        // Favorite toggle buttons (delegated)
+        document.addEventListener('click', (e) => {
+            const favBtn = e.target.closest('.favorite-btn');
+            if (favBtn) {
+                e.preventDefault();
+                this.toggleFavoriteFromButton(favBtn);
+            }
         });
     }
     
@@ -447,6 +449,9 @@ class DashboardSPA {
         
         // Update the repository count display
         this.updateRepositoryCountDisplay(dataArray);
+
+        // Refresh favorites map for this render
+        this.favorites = this.loadFavorites();
         
         // Only display the table if a specific repository is selected
         if (this.state.selectedRepo && this.state.selectedRepo !== 'all' && this.state.selectedRepo !== '') {
@@ -549,6 +554,7 @@ class DashboardSPA {
         // Dynamic table headers with sorting
         const tableHeaders = isPRs ? `
             <tr>
+                <th class="favorite-cell"><i class="fas fa-star"></i></th>
                 <th onclick="sortTable('${repoId}', 'number')" class="sortable" data-column="number"># <i class="fas fa-sort sort-icon"></i></th>
                 <th onclick="sortTable('${repoId}', 'title')" class="sortable" data-column="title">Title <i class="fas fa-sort sort-icon"></i></th>
                 <th>Labels</th>
@@ -559,6 +565,7 @@ class DashboardSPA {
                 <th onclick="sortTable('${repoId}', 'updated')" class="sortable" data-column="updated">Updated <i class="fas fa-sort sort-icon"></i></th>
             </tr>` : `
             <tr>
+                <th class="favorite-cell"><i class="fas fa-star"></i></th>
                 <th onclick="sortTable('${repoId}', 'number')" class="sortable" data-column="number"># <i class="fas fa-sort sort-icon"></i></th>
                 <th onclick="sortTable('${repoId}', 'title')" class="sortable" data-column="title">Title <i class="fas fa-sort sort-icon"></i></th>
                 <th onclick="sortTable('${repoId}', 'labels')" class="sortable" data-column="labels">Labels <i class="fas fa-sort sort-icon"></i></th>
@@ -710,6 +717,68 @@ class DashboardSPA {
             // Hide the count display when no specific repository is selected
             countDisplay.style.display = 'none';
         }
+    }
+
+    // Favorites helpers -------------------------------------------------
+    loadFavorites() {
+        try {
+            const raw = window.localStorage.getItem(this.favoritesKey) || '[]';
+            const parsed = JSON.parse(raw);
+            if (!Array.isArray(parsed)) return new Map();
+            return new Map(parsed.map(item => [item.key, item]));
+        } catch (error) {
+            console.warn('Unable to load favorites from storage', error);
+            return new Map();
+        }
+    }
+
+    persistFavorites() {
+        try {
+            window.localStorage.setItem(this.favoritesKey, JSON.stringify(Array.from(this.favorites.values())));
+        } catch (error) {
+            console.warn('Unable to persist favorites', error);
+        }
+    }
+
+    buildFavoriteKey(type, repo, number) {
+        return `${type || 'issues'}:${repo || 'unknown'}:${number || ''}`;
+    }
+
+    toggleFavoriteFromButton(button) {
+        const repo = button.getAttribute('data-repo') || '';
+        const repoDisplay = button.getAttribute('data-repo-display') || repo;
+        const number = button.getAttribute('data-number');
+        const title = button.getAttribute('data-title') || '';
+        const dataType = button.getAttribute('data-type') || this.state.dataType || 'issues';
+        const state = button.getAttribute('data-state') || '';
+        const url = button.getAttribute('data-url') || '';
+        const updatedAt = button.getAttribute('data-updated') || '';
+        const createdAt = button.getAttribute('data-created') || '';
+
+        const key = this.buildFavoriteKey(dataType, repo, number);
+
+        if (this.favorites.has(key)) {
+            this.favorites.delete(key);
+            button.classList.remove('active');
+            button.querySelector('i').className = 'fas fa-star-half-alt';
+        } else {
+            this.favorites.set(key, {
+                key,
+                dataType,
+                repo,
+                repoDisplay,
+                number,
+                title,
+                state,
+                url,
+                updatedAt,
+                createdAt
+            });
+            button.classList.add('active');
+            button.querySelector('i').className = 'fas fa-star';
+        }
+
+        this.persistFavorites();
     }
     
     updateRepositoryCountsInUI() {
@@ -1072,6 +1141,10 @@ class DashboardSPA {
     generateIssueRow(item) {
         const labels = this.generateLabelsHTML(item.labels || []);
         const assignee = this.generateAssigneeHTML(item.assignee);
+        const repoName = item.repository || item.repo || '';
+        const repoDisplay = (this.state.repositories.find(r => r.name === repoName) || {}).display_name || repoName;
+        const favKey = this.buildFavoriteKey(this.state.dataType, repoName, item.number);
+        const isFav = this.favorites.has(favKey);
         // Extract issue author similar to PRs
         let authorLogin = '';
         if (item.user_login) {
@@ -1109,8 +1182,25 @@ class DashboardSPA {
             data-state="${item.state || ''}"
             data-triage="${item.triage || '0'}"
             data-priority="${item.priority || '0'}">
+            <td class="favorite-cell">
+                <button class="favorite-btn ${isFav ? 'active' : ''}" 
+                        title="Toggle favorite"
+                        onclick="dashboardSPA.toggleFavoriteFromButton(this); return false;"
+                        data-fav-key="${favKey}"
+                        data-repo="${this.escapeHtml(repoName)}"
+                        data-repo-display="${this.escapeHtml(repoDisplay)}"
+                        data-number="${item.number}"
+                        data-title="${this.escapeHtml(item.title)}"
+                        data-type="issues"
+                        data-state="${item.state || ''}"
+                        data-url="${item.html_url || ''}"
+                        data-updated="${item.updated_at || ''}"
+                        data-created="${item.created_at || ''}">
+                    <i class="fas ${isFav ? 'fa-star' : 'fa-star-half-alt'}"></i>
+                </button>
+            </td>
             <td><a href="${item.html_url}" target="_blank">#${item.number}</a></td>
-            <td><a href="#" class="open-modal"><strong>${this.escapeHtml(item.title)}</strong></a>${item.state === 'closed' ? '<span class="badge badge-danger ml-2">Closed</span>' : ''}</td>
+            <td class="title-cell"><a href="#" class="open-modal"><strong>${this.escapeHtml(item.title)}</strong></a>${item.state === 'closed' ? '<span class="badge badge-danger ml-2">Closed</span>' : ''}</td>
             <td>${labels}</td>
             <td>${authorLogin ? `<a href="https://github.com/${authorLogin}" target="_blank">@${authorLogin}</a>` : '<span class="text-muted">Unknown</span>'}</td>
             <td>${assignee}</td>
@@ -1144,6 +1234,10 @@ class DashboardSPA {
         const labelsHTML = this.generateLabelsHTML(item.labels || []);
     const reviewersHTML = this.generateUserBadgesHTML(reviewers);
     const assigneesHTML = this.generateUserBadgesHTML(assigneesRaw);
+        const repoName = item.repository || item.repo || '';
+        const repoDisplay = (this.state.repositories.find(r => r.name === repoName) || {}).display_name || repoName;
+        const favKey = this.buildFavoriteKey('prs', repoName, item.number);
+        const isFav = this.favorites.has(favKey);
 
         const modalData = {
             dataType: 'prs',
@@ -1246,7 +1340,24 @@ class DashboardSPA {
             return remaining > 0 ? `${badges}<span class="badge badge-light">+${remaining} more</span>` : badges;
         } catch (e) {
             return '';
-        }
+                            <td class="favorite-cell">
+                                <button class="favorite-btn ${isFav ? 'active' : ''}" 
+                                        title="Toggle favorite"
+                                        onclick="dashboardSPA.toggleFavoriteFromButton(this); return false;"
+                                        data-fav-key="${favKey}"
+                                        data-repo="${this.escapeHtml(repoName)}"
+                                        data-repo-display="${this.escapeHtml(repoDisplay)}"
+                                        data-number="${item.number}"
+                                        data-title="${this.escapeHtml(item.title)}"
+                                        data-type="prs"
+                                        data-state="${item.state || ''}"
+                                        data-url="${item.html_url || ''}"
+                                        data-updated="${item.updated_at || ''}"
+                                        data-created="${item.created_at || ''}">
+                                    <i class="fas ${isFav ? 'fa-star' : 'fa-star-half-alt'}"></i>
+                                </button>
+                            </td>
+                            <td><a href="${item.html_url}" target="_blank">#${item.number}</a></td>
     }
     
     generateLabelsHTML(labels) {
@@ -1785,6 +1896,7 @@ class DashboardSPA {
     
     setDataType(dataType) {
         if (dataType !== this.state.dataType) {
+            this.state.cache.clear();
             this.state.dataType = dataType;
             this.updateURL();
             this.updateDataTypeToggle(); // Update button UI states
@@ -1794,6 +1906,7 @@ class DashboardSPA {
     
     setShowState(showState) {
         if (showState !== this.state.showState) {
+            this.state.cache.clear();
             this.state.showState = showState;
             this.updateURL();
             this.updateGlobalStateToggle();
@@ -1803,6 +1916,7 @@ class DashboardSPA {
     
     setSelectedRepo(repo) {
         if (repo !== this.state.selectedRepo) {
+            this.state.cache.clear();
             this.state.selectedRepo = repo;
             this.updateURL();
             this.updateVisibility();

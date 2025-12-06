@@ -221,6 +221,161 @@ body {
     margin-top: 40px;
 }
 
+/* Compact repo strip */
+.repo-strip {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px 16px;
+    padding: 12px 14px;
+    border: 1px solid #e5e7eb;
+    border-left: 4px solid var(--banner-color, #0d6efd);
+    border-radius: 10px;
+    background: linear-gradient(90deg, color-mix(in srgb, var(--banner-color, #0d6efd) 8%, #ffffff), #ffffff);
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+}
+
+.repo-strip__left {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.repo-strip__title {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: baseline;
+    font-weight: 700;
+}
+
+.repo-strip__title .repo-name {
+    font-size: 1rem;
+    color: #0f172a;
+}
+
+.repo-strip__title .repo-id {
+    font-size: 0.85rem;
+}
+
+.repo-strip__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 0.85rem;
+}
+
+.repo-strip__meta .meta-chip {
+    padding: 4px 10px;
+    border-radius: 999px;
+    text-decoration: none;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+
+.meta-chip--open,
+.meta-chip--closed {
+    border: 1px solid #22c55e;
+    background-color: rgba(34, 197, 94, 0.12);
+    color: #166534;
+    font-weight: 700;
+}
+
+.meta-chip--closed {
+    opacity: 0.88;
+}
+
+.meta-chip--issues,
+.meta-chip--prs {
+    border: 1px solid #2563eb;
+    background-color: rgba(37, 99, 235, 0.12);
+    color: #1d4ed8;
+    font-weight: 700;
+}
+
+.meta-chip--prs {
+    border-color: #a855f7;
+    background-color: rgba(168, 85, 247, 0.14);
+    color: #7e22ce;
+}
+
+.meta-chip--open:hover,
+.meta-chip--closed:hover,
+.meta-chip--issues:hover,
+.meta-chip--prs:hover {
+    transform: translateY(-1px);
+    filter: brightness(0.97);
+}
+
+.meta-chip--active.meta-chip--open,
+.meta-chip--active.meta-chip--closed {
+    color: #0b1220;
+    background-color: #bbf7d0;
+    border-color: #22c55e;
+    box-shadow: 0 4px 10px rgba(34, 197, 94, 0.25);
+}
+
+.meta-chip--active.meta-chip--issues,
+.meta-chip--active.meta-chip--prs {
+    color: #0b1220;
+    background-color: #dbeafe;
+    border-color: #2563eb;
+    box-shadow: 0 4px 10px rgba(37, 99, 235, 0.2);
+}
+
+.meta-chip--active.meta-chip--prs {
+    background-color: #f3e8ff;
+    border-color: #a855f7;
+    box-shadow: 0 4px 10px rgba(168, 85, 247, 0.22);
+}
+
+.meta-chip--ghost:hover {
+    border-color: color-mix(in srgb, var(--banner-color, #0d6efd) 40%, #cbd5e1);
+    color: #0f172a;
+    background-color: color-mix(in srgb, var(--banner-color, #0d6efd) 10%, #ffffff);
+}
+
+.repo-strip__controls {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.repo-strip .btn {
+    font-weight: 600;
+}
+
+.repo-strip .btn-link {
+    padding-left: 4px;
+    padding-right: 4px;
+}
+
+.repo-strip__github {
+    color: #0f172a;
+    border-radius: 999px;
+    padding: 6px 8px !important;
+    transition: background-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
+}
+
+.repo-strip__github:hover {
+    background-color: color-mix(in srgb, var(--banner-color, #0d6efd) 15%, #ffffff);
+    color: #0f172a;
+    text-decoration: none;
+    transform: translateY(-1px);
+}
+
+@media (max-width: 768px) {
+    .repo-strip {
+        align-items: flex-start;
+    }
+
+    .repo-strip__controls {
+        width: 100%;
+    }
+}
+
 @media (max-width: 900px) {
     .stat-card-emphasis {
         grid-column: span 1;
@@ -277,6 +432,90 @@ body {
     display: block;
     width: 100%;
     overflow-x: auto;
+    overflow-y: hidden;
+}
+
+/* Ensure repository tables don't overflow the viewport */
+.repository-section {
+    width: 100%;
+    overflow: hidden;
+}
+
+.repository-section .table {
+    width: 100%;
+    max-width: 100%;
+    table-layout: auto;
+}
+
+.repository-section .table td,
+.repository-section .table th {
+    white-space: nowrap;
+}
+
+.repository-section .table td.title-cell {
+    white-space: normal;
+    min-width: 220px;
+}
+
+.follow-cell {
+    width: 44px;
+    text-align: center;
+}
+
+.follow-btn {
+    border: none;
+    background: transparent;
+    color: #0d6efd;
+    padding: 4px 6px;
+}
+
+.follow-btn.active {
+    color: #0b5ed7;
+}
+
+/* Elevated toggle buttons for clarity */
+.btn-toggle-group .btn {
+    font-weight: 600;
+    border-radius: 999px;
+    padding: 0.35rem 0.9rem;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+    margin-right: 0.35rem;
+    transition: transform 0.05s ease, box-shadow 0.15s ease;
+}
+
+.btn-toggle-group .btn:last-child {
+    margin-right: 0;
+}
+
+.btn-toggle-group .btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.12);
+}
+
+.btn-toggle-group .btn-outline-success.active,
+.btn-toggle-group .btn-outline-secondary.active,
+.btn-toggle-group .btn-outline-dark.active,
+.btn-toggle-group .btn-primary,
+.btn-toggle-group .btn-primary:focus,
+.btn-toggle-group .btn-primary:hover {
+    color: #fff;
+}
+
+.dropdown-menu .repo-item {
+    border-left: 4px solid var(--cat-color, #6c757d);
+    background-color: var(--cat-bg, transparent);
+    color: #0f172a;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.dropdown-menu .repo-item:hover {
+    background-color: color-mix(in srgb, var(--cat-color, #6c757d) 18%, #ffffff);
+}
+
+.dropdown-menu .repo-item.active {
+    background-color: color-mix(in srgb, var(--cat-color, #6c757d) 26%, #ffffff) !important;
+    border-left-color: var(--cat-color, #6c757d);
+    font-weight: 700;
 }
 
 /* Bootstrap-compatible button styling */
@@ -1136,17 +1375,24 @@ body {
     flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
-    padding: 0.5rem 1rem;
+    padding: 0.6rem 1.2rem;
+    background: linear-gradient(120deg, #0e172a 0%, #12213d 50%, #0e172a 100%);
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.25);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .navbar-brand {
-    display: inline-block;
-    padding-top: 0.3125rem;
-    padding-bottom: 0.3125rem;
-    margin-right: 1rem;
-    font-size: 1.25rem;
-    line-height: inherit;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding-top: 0.2rem;
+    padding-bottom: 0.2rem;
+    margin-right: 1.5rem;
+    font-size: 1.2rem;
+    line-height: 1.2;
     white-space: nowrap;
+    font-weight: 700;
+    letter-spacing: 0.01em;
 }
 
 .navbar-nav {
@@ -1176,16 +1422,54 @@ body {
 }
 
 .navbar-dark .navbar-nav .nav-link {
-    color: rgba(255, 255, 255, 0.5);
+    color: rgba(255, 255, 255, 0.78);
+    padding: 0.35rem 0.65rem;
+    border-radius: 6px;
+    transition: color 0.15s ease, background-color 0.15s ease, transform 0.1s ease;
 }
 
 .navbar-dark .navbar-nav .nav-link:hover,
 .navbar-dark .navbar-nav .nav-link:focus {
-    color: rgba(255, 255, 255, 0.75);
+    color: #ffffff;
+    background-color: rgba(255, 255, 255, 0.08);
+    text-decoration: none;
+    transform: translateY(-1px);
 }
 
 .navbar-dark .navbar-nav .nav-link.active {
+    color: #ffffff;
+    background-color: rgba(59, 130, 246, 0.28);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+}
+
+.navbar-dark .dropdown-menu {
+    background: linear-gradient(160deg, #0f172a 0%, #101827 50%, #0f172a 100%);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    box-shadow: 0 14px 28px rgba(0, 0, 0, 0.3);
+}
+
+.navbar-dark .dropdown-header {
+    color: #cbd5e1;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 0.7rem;
+    opacity: 0.85;
+}
+
+.navbar-dark .dropdown-item {
+    color: #e2e8f0;
+    border-radius: 6px;
+    margin: 2px 4px;
+    padding: 0.45rem 0.75rem;
+    transition: background-color 0.15s ease, transform 0.1s ease;
+}
+
+.navbar-dark .dropdown-item:hover,
+.navbar-dark .dropdown-item:focus,
+.navbar-dark .dropdown-item.active {
     color: #fff;
+    background-color: rgba(255, 255, 255, 0.12);
+    transform: translateY(-1px);
 }
 
 /* Step 22: Bootstrap Components - Modals */

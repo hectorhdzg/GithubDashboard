@@ -1,6 +1,7 @@
 """Flask entry point for the dashboard application."""
 from __future__ import annotations
 
+import json
 import logging
 import os
 from typing import Any, Dict, List, Optional, Tuple
@@ -20,6 +21,106 @@ def create_app() -> Flask:
 
     app = Flask(__name__, template_folder=template_folder, static_folder=static_folder)
     client = SyncClient()
+
+    def _normalize_list(value: Any) -> List[Any]:
+        """Convert assorted list-ish values (JSON strings, dicts, scalars) into a clean list."""
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return value
+        if isinstance(value, dict):
+            return [value]
+        if isinstance(value, str):
+            stripped = value.strip()
+            if stripped.startswith("["):
+                try:
+                    parsed = json.loads(stripped)
+                    if isinstance(parsed, list):
+                        return parsed
+                except json.JSONDecodeError:
+                    pass
+            return [value]
+        return [value]
+
+    def _label_color_from_name(name: str) -> str:
+        """Generate a deterministic, pleasant color hex from a label name."""
+        if not name:
+            return "6c757d"
+        # Simple hash for stable hue
+        h = sum(ord(c) for c in name) % 360
+        # Convert HSL to hex (fixed saturation/lightness for readability)
+        s = 65
+        l = 45
+        # Utility conversion
+        def hsl_to_rgb(hue: float, sat: float, lig: float) -> tuple[int, int, int]:
+            c = (1 - abs(2 * lig - 1)) * sat
+            x = c * (1 - abs((hue / 60) % 2 - 1))
+            m = lig - c / 2
+            if 0 <= hue < 60:
+                r1, g1, b1 = c, x, 0
+            elif 60 <= hue < 120:
+                r1, g1, b1 = x, c, 0
+            elif 120 <= hue < 180:
+                r1, g1, b1 = 0, c, x
+            elif 180 <= hue < 240:
+                r1, g1, b1 = 0, x, c
+            elif 240 <= hue < 300:
+                r1, g1, b1 = x, 0, c
+            else:
+                r1, g1, b1 = c, 0, x
+            r, g, b = (int((r1 + m) * 255), int((g1 + m) * 255), int((b1 + m) * 255))
+            return r, g, b
+
+        r, g, b = hsl_to_rgb(h, s / 100, l / 100)
+        return f"{r:02x}{g:02x}{b:02x}"
+
+    def _category_color(name: Optional[str]) -> str:
+        """Return a vivid, deterministic color for repository categories, including unknown ones."""
+        key = (name or "general").strip().lower()
+
+        # Deterministic assignment across a palette for any unknown category
+        palette_cycle = [
+            "#2563eb",
+            "#22c55e",
+            "#0ea5e9",
+            "#f59e0b",
+            "#f97316",
+            "#e11d48",
+            "#8b5cf6",
+            "#14b8a6",
+            "#a855f7",
+            "#3b82f6",
+            "#10b981",
+            "#ef4444",
+            "#fbbf24",
+            "#6366f1",
+        ]
+
+        index = sum(ord(c) for c in key) % len(palette_cycle)
+        return palette_cycle[index]
+
+    def _enrich_labels(labels: List[Any]) -> List[Dict[str, Any]]:
+        enriched: List[Dict[str, Any]] = []
+        for label in labels:
+            if isinstance(label, dict):
+                name = label.get("name") or label.get("label") or ""
+                color = label.get("color") or _label_color_from_name(name)
+                enriched.append({"name": name, "color": color})
+            else:
+                name = str(label)
+                enriched.append({"name": name, "color": _label_color_from_name(name)})
+        return enriched
+
+    # Make helpers available to templates
+    app.jinja_env.globals["category_color"] = _category_color
+
+    @app.after_request
+    def add_no_cache_headers(response: Flask.response_class):
+        """Avoid browser caching of dashboard pages so tables always reflect latest data."""
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
 
     def classify_error(status: Optional[str], error_message: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
         """Categorize known error types for downstream highlighting."""
@@ -76,6 +177,8 @@ def create_app() -> Flask:
                 repo.get("issues_open"),
                 repo.get("open_issues"),
                 repo.get("open_issues_count"),
+                repo.get("issue_count"),
+                repo.get("issueCount"),
             ]
             issues_summary = repo.get("issues")
             if isinstance(issues_summary, dict):
@@ -85,6 +188,9 @@ def create_app() -> Flask:
                 repo.get("prs_open"),
                 repo.get("open_prs"),
                 repo.get("open_prs_count"),
+                repo.get("pr_count"),
+                repo.get("pull_request_count"),
+                repo.get("pullRequestCount"),
             ]
             pr_summary = repo.get("pull_requests")
             if isinstance(pr_summary, dict):
@@ -412,7 +518,7 @@ def create_app() -> Flask:
 
         return grouped
 
-    @app.route("/", endpoint="dashboard")
+    @app.route("/dashboard", endpoint="dashboard")
     def dashboard_view():
         data_type = request.args.get("type", "issues").lower()
         if data_type not in {"issues", "prs"}:
@@ -423,6 +529,11 @@ def create_app() -> Flask:
             state = "open"
 
         selected_repo = request.args.get("repo")
+        selected_repo_lower = selected_repo.lower() if selected_repo else None
+        selected_repo_slug = None
+        if selected_repo_lower:
+            parts = selected_repo_lower.split("/")
+            selected_repo_slug = "/".join(parts[-2:]) if len(parts) >= 2 else selected_repo_lower
 
         repositories = client.get_repositories()
         sync_error = client.last_error
@@ -433,6 +544,7 @@ def create_app() -> Flask:
         active_repo: Optional[Dict[str, Any]] = None
         work_items: List[Dict[str, Any]] = []
         data_error: Optional[str] = None
+        state_counts: Dict[str, int] = {"open": 0, "closed": 0, "all": 0}
 
         if selected_repo:
             active_repo = next((r for r in repositories if r.get("repo") == selected_repo), None)
@@ -445,7 +557,60 @@ def create_app() -> Flask:
                 data = client.get_repository_issues(selected_repo, state=state)
 
             if isinstance(data, list):
-                work_items = data
+                # Client-side filter safeguard in case backend ignores repo parameter
+                def _match_repo(item: Dict[str, Any]) -> bool:
+                    if not selected_repo_lower:
+                        return False
+
+                    def eq(value: Any) -> bool:
+                        if not isinstance(value, str):
+                            return False
+                        lower_val = value.lower()
+                        return lower_val == selected_repo_lower or (selected_repo_slug and lower_val.endswith(selected_repo_slug))
+
+                    for key in ("repo", "repository", "repository_full_name"):
+                        if eq(item.get(key)):
+                            return True
+
+                    base_repo = item.get("base", {}).get("repo", {}) if isinstance(item.get("base"), dict) else {}
+                    head_repo = item.get("head", {}).get("repo", {}) if isinstance(item.get("head"), dict) else {}
+                    for repo_obj in (base_repo, head_repo):
+                        if eq(repo_obj.get("full_name")):
+                            return True
+                        if eq(repo_obj.get("name")):
+                            return True
+
+                    html_url = item.get("html_url") or item.get("url") or item.get("repository_url") or ""
+                    if isinstance(html_url, str):
+                        lower_url = html_url.lower()
+                        if selected_repo_lower in lower_url or (selected_repo_slug and selected_repo_slug in lower_url):
+                            return True
+
+                    return False
+
+                work_items = [item for item in data if _match_repo(item)] or data
+                if not work_items and data:
+                    data_error = "No items matched the selected repository."
+
+                # Track counts by state for chips
+                for item in work_items:
+                    item_state = (item.get("state") or "").lower()
+                    if item_state in {"open", "closed"}:
+                        state_counts[item_state] += 1
+                    state_counts["all"] += 1
+
+                # Normalize list-ish fields so templates don't show raw JSON strings
+                for item in work_items:
+                    item["labels"] = _enrich_labels(_normalize_list(item.get("labels")))
+                    assignees = _normalize_list(item.get("assignees"))
+                    if not assignees and item.get("assignee"):
+                        assignees = _normalize_list(item.get("assignee"))
+                    item["assignees"] = assignees
+
+                    reviewers = _normalize_list(item.get("reviewers"))
+                    requested_reviewers = _normalize_list(item.get("requested_reviewers"))
+                    # Prefer requested_reviewers if present
+                    item["requested_reviewers"] = requested_reviewers or reviewers
             else:
                 work_items = []
                 data_error = "Unable to load data from sync service."
@@ -462,6 +627,19 @@ def create_app() -> Flask:
             data_error=data_error,
             sync_error=sync_error,
             sync_base_url=sync_base_url,
+            state_counts=state_counts,
+        )
+
+    @app.route("/", endpoint="home")
+    @app.route("/favorites", endpoint="favorites")
+    def favorites_view():
+        repositories = client.get_repositories()
+        grouped = group_repositories(repositories)
+        totals = compute_totals(repositories)
+        return render_template(
+            "favorites/index.html",
+            grouped_repositories=grouped,
+            totals=totals,
         )
 
     return app

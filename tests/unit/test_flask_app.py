@@ -68,18 +68,17 @@ class TestFlaskApp(unittest.TestCase):
             os.path.join(os.path.dirname(__file__), '..', '..', 'static')))
     
     def test_index_route(self):
-        """Test the main dashboard route."""
+        """Landing page should render favorites view."""
         with patch.object(SyncClient, 'get_repositories', return_value=self.sample_repositories):
             response = self.client.get('/')
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b'<!DOCTYPE html>', response.data)
-        self.assertIn(b'Select a repository from the navigation bar', response.data)
+        self.assertIn(b'Pinned Work Items', response.data)
     
     def test_dashboard_with_repository_shows_issues(self):
         """Selecting a repository renders issue data."""
         with patch.object(SyncClient, 'get_repositories', return_value=self.sample_repositories), \
              patch.object(SyncClient, 'get_repository_issues', return_value=[self.sample_issue]):
-            response = self.client.get('/?repo=azure/example-repo&type=issues&state=open')
+            response = self.client.get('/dashboard?repo=azure/example-repo&type=issues&state=open')
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'Example Repo', response.data)
         self.assertIn(b'Sample Issue', response.data)
@@ -88,15 +87,32 @@ class TestFlaskApp(unittest.TestCase):
         """Selecting pull requests shows PR data."""
         with patch.object(SyncClient, 'get_repositories', return_value=self.sample_repositories), \
              patch.object(SyncClient, 'get_repository_pull_requests', return_value=[self.sample_pr]):
-            response = self.client.get('/?repo=azure/example-repo&type=prs&state=open')
+            response = self.client.get('/dashboard?repo=azure/example-repo&type=prs&state=open')
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'Sample PR', response.data)
         self.assertIn(b'Reviewers', response.data)
 
+    def test_navbar_uses_issue_count_fallback_fields(self):
+        """Navbar badges should display counts from alternate issue/pr fields."""
+        repositories = [{
+            'repo': 'azure/example-repo',
+            'display_name': 'Example Repo',
+            'language_group': 'Python',
+            'main_category': 'SDK',
+            'issue_count': 7,
+            'pr_count': 2,
+        }]
+
+        with patch.object(SyncClient, 'get_repositories', return_value=repositories):
+            response = self.client.get('/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'>7</span>', response.data)
+
     def test_unknown_repository_returns_404(self):
         """Unknown repository should return 404."""
         with patch.object(SyncClient, 'get_repositories', return_value=self.sample_repositories):
-            response = self.client.get('/?repo=azure/does-not-exist')
+            response = self.client.get('/dashboard?repo=azure/does-not-exist')
         self.assertEqual(response.status_code, 404)
     
     def test_nonexistent_route(self):
@@ -106,10 +122,10 @@ class TestFlaskApp(unittest.TestCase):
     
     def test_template_rendering(self):
         """Test that templates are rendered correctly."""
-        # Test dashboard template has expected structure
+        # Landing page should render favorites template
         with patch.object(SyncClient, 'get_repositories', return_value=self.sample_repositories):
             response = self.client.get('/')
-        self.assertIn(b'GitHub Issues Dashboard', response.data)
+        self.assertIn(b'Favorites | GitHub Issues Dashboard', response.data)
         self.assertIn(b'<html', response.data)
         self.assertIn(b'</html>', response.data)
     
