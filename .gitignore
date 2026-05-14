@@ -45,3 +45,7 @@ coverage.xml
 *.pid
 *.seed
 
+# Test output
+test_output.txt
+pytest_output.txt
+

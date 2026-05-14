@@ -164,7 +164,7 @@
     function escapeHtml(value) {
         const div = document.createElement('div');
         div.textContent = value == null ? '' : String(value);
-        return div.innerHTML;
+        return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
     if (clearButton) {

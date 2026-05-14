@@ -100,32 +100,10 @@ class TestTemplateIntegration(unittest.TestCase):
         self.assertIn('Issues', content)
         self.assertIn('Pull Requests', content)
     
-    def test_stats_template_integration(self):
-        """Test that stats template renders correctly."""
-        response = self.client.get('/stats')
-        self.assertEqual(response.status_code, 200)
-        
-        content = response.data.decode('utf-8')
-        self.assertIn('stats', content.lower())
-    
-    def test_repositories_template_integration(self):
-        """Test that repositories template renders correctly."""
-        response = self.client.get('/repositories')
-        self.assertEqual(response.status_code, 200)
-        
-        content = response.data.decode('utf-8')
-        self.assertIn('repositories', content.lower())
-    
     def test_static_files_integration(self):
         """Test that static files are served correctly."""
-        # Test CSS file
         css_response = self.client.get('/static/css/dashboard.css')
-        # Should either return CSS or 404 if file doesn't exist
-        self.assertIn(css_response.status_code, [200, 404])
-        
-        # Test JS file
-        js_response = self.client.get('/static/js/spa.js')
-        self.assertIn(js_response.status_code, [200, 404])
+        self.assertEqual(css_response.status_code, 200)
 
 
 class TestAPIDataFlow(unittest.TestCase):

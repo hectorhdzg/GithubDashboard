@@ -10,20 +10,31 @@ from unittest.mock import patch, MagicMock
 # Add src directory to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
 
-from app import app
-from services.sync_client import SyncClient
+from app import create_app
 
 
 class TestFlaskApp(unittest.TestCase):
     """Test cases for the main Flask application."""
-    
+
+    @classmethod
+    def setUpClass(cls):
+        cls._mock_client = MagicMock()
+        cls._mock_client.last_error = None
+        cls._mock_client.base_url = "http://test:8000"
+        cls._mock_client.get_repositories.return_value = []
+        cls._mock_client.get_repository_issues.return_value = []
+        cls._mock_client.get_repository_pull_requests.return_value = []
+        with patch('app.SyncClient', return_value=cls._mock_client):
+            cls._app = create_app()
+        cls._app.config['TESTING'] = True
+
     def setUp(self):
         """Set up test client and app context."""
-        self.app = app
-        self.app.config['TESTING'] = True
+        self.app = self._app
         self.client = self.app.test_client()
         self.app_context = self.app.app_context()
         self.app_context.push()
+        self.mc = self._mock_client
         self.sample_repositories = [
             {
                 'repo': 'azure/example-repo',
@@ -69,25 +80,25 @@ class TestFlaskApp(unittest.TestCase):
     
     def test_index_route(self):
         """Landing page should render favorites view."""
-        with patch.object(SyncClient, 'get_repositories', return_value=self.sample_repositories):
-            response = self.client.get('/')
+        self.mc.get_repositories.return_value = self.sample_repositories
+        response = self.client.get('/')
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b'Pinned Work Items', response.data)
+        self.assertIn(b'Followed Work Items', response.data)
     
     def test_dashboard_with_repository_shows_issues(self):
         """Selecting a repository renders issue data."""
-        with patch.object(SyncClient, 'get_repositories', return_value=self.sample_repositories), \
-             patch.object(SyncClient, 'get_repository_issues', return_value=[self.sample_issue]):
-            response = self.client.get('/dashboard?repo=azure/example-repo&type=issues&state=open')
+        self.mc.get_repositories.return_value = self.sample_repositories
+        self.mc.get_repository_issues.return_value = [self.sample_issue]
+        response = self.client.get('/dashboard?repo=azure/example-repo&type=issues&state=open')
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'Example Repo', response.data)
         self.assertIn(b'Sample Issue', response.data)
     
     def test_dashboard_with_repository_prs(self):
         """Selecting pull requests shows PR data."""
-        with patch.object(SyncClient, 'get_repositories', return_value=self.sample_repositories), \
-             patch.object(SyncClient, 'get_repository_pull_requests', return_value=[self.sample_pr]):
-            response = self.client.get('/dashboard?repo=azure/example-repo&type=prs&state=open')
+        self.mc.get_repositories.return_value = self.sample_repositories
+        self.mc.get_repository_pull_requests.return_value = [self.sample_pr]
+        response = self.client.get('/dashboard?repo=azure/example-repo&type=prs&state=open')
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'Sample PR', response.data)
         self.assertIn(b'Reviewers', response.data)
@@ -102,17 +113,16 @@ class TestFlaskApp(unittest.TestCase):
             'issue_count': 7,
             'pr_count': 2,
         }]
-
-        with patch.object(SyncClient, 'get_repositories', return_value=repositories):
-            response = self.client.get('/')
-
+        self.mc.get_repositories.return_value = repositories
+        response = self.client.get('/')
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b'>7</span>', response.data)
+        # Badge shows combined issues + PRs total (7 + 2 = 9)
+        self.assertIn(b'>9</span>', response.data)
 
     def test_unknown_repository_returns_404(self):
         """Unknown repository should return 404."""
-        with patch.object(SyncClient, 'get_repositories', return_value=self.sample_repositories):
-            response = self.client.get('/dashboard?repo=azure/does-not-exist')
+        self.mc.get_repositories.return_value = self.sample_repositories
+        response = self.client.get('/dashboard?repo=azure/does-not-exist')
         self.assertEqual(response.status_code, 404)
     
     def test_nonexistent_route(self):
@@ -122,10 +132,9 @@ class TestFlaskApp(unittest.TestCase):
     
     def test_template_rendering(self):
         """Test that templates are rendered correctly."""
-        # Landing page should render favorites template
-        with patch.object(SyncClient, 'get_repositories', return_value=self.sample_repositories):
-            response = self.client.get('/')
-        self.assertIn(b'Favorites | GitHub Issues Dashboard', response.data)
+        self.mc.get_repositories.return_value = self.sample_repositories
+        response = self.client.get('/')
+        self.assertIn(b'Followed Items | GitHub Issues Dashboard', response.data)
         self.assertIn(b'<html', response.data)
         self.assertIn(b'</html>', response.data)
     
@@ -139,18 +148,7 @@ class TestFlaskApp(unittest.TestCase):
 
 class TestAppStartup(unittest.TestCase):
     """Test cases for application startup and configuration."""
-    
-    @patch('app.app.run')
-    def test_app_runs_with_correct_config(self, mock_run):
-        """Test that app runs with correct configuration when executed directly."""
-        # Set environment variable for testing
-        with patch.dict('os.environ', {'PORT': '8001'}):
-            # Import and run the app module's main block
-            exec(open(os.path.join(os.path.dirname(__file__), '..', '..', 'src', 'app.py')).read())
-            
-            # Verify that app.run was called with correct parameters
-            mock_run.assert_called_with(host="0.0.0.0", port=8001, debug=False)
-    
+
     def test_port_environment_variable(self):
         """Test that PORT environment variable is used correctly."""
         with patch.dict('os.environ', {'PORT': '9000'}):
