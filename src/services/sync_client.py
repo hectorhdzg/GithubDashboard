@@ -80,22 +80,3 @@ class SyncClient:
             if isinstance(payload.get("data"), list):
                 return payload["data"]
         return []
-
-    def get_statistics(self) -> Dict[str, Any]:
-        payload = self._get("api/statistics")
-        return payload if isinstance(payload, dict) else {}
-
-    def get_sync_history(self, limit: int = 20) -> List[Dict[str, Any]]:
-        payload = self._get("api/sync/history", params={"limit": limit})
-        if isinstance(payload, list):
-            return payload
-        if isinstance(payload, dict):
-            if isinstance(payload.get("sync_history"), list):
-                return payload["sync_history"]
-            if isinstance(payload.get("data"), list):
-                return payload["data"]
-        return []
-
-    def get_scheduler_status(self) -> Dict[str, Any]:
-        payload = self._get("api/scheduler/status")
-        return payload if isinstance(payload, dict) else {}
