@@ -35,6 +35,9 @@ class TestFlaskApp(unittest.TestCase):
         self.app_context = self.app.app_context()
         self.app_context.push()
         self.mc = self._mock_client
+        # Clear response cache between tests so mocked data isn't stale
+        if hasattr(self.app, '_response_cache'):
+            self.app._response_cache.clear()
         self.sample_repositories = [
             {
                 'repo': 'azure/example-repo',
@@ -84,6 +87,26 @@ class TestFlaskApp(unittest.TestCase):
         response = self.client.get('/')
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'Followed Work Items', response.data)
+
+    def test_health_endpoint_connected(self):
+        """Health check should return 200 when sync service is reachable."""
+        self.mc.get_repositories.return_value = []
+        self.mc.last_error = None
+        response = self.client.get('/health')
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertEqual(data['status'], 'ok')
+        self.assertEqual(data['sync_service'], 'connected')
+
+    def test_health_endpoint_error(self):
+        """Health check should return 503 when sync service has errors."""
+        self.mc.get_repositories.return_value = None
+        self.mc.last_error = "Connection refused"
+        response = self.client.get('/health')
+        self.assertEqual(response.status_code, 503)
+        data = response.get_json()
+        self.assertEqual(data['sync_service'], 'error')
+        self.assertEqual(data['sync_error'], 'Connection refused')
     
     def test_dashboard_with_repository_shows_issues(self):
         """Selecting a repository renders issue data."""

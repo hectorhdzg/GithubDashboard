@@ -1,6 +1,7 @@
 Flask==3.0.3
 requests==2.31.0
 gunicorn==23.0.0
+cachetools==5.3.3
 
 # Test dependencies
 pytest==7.4.3
