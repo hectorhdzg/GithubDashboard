@@ -4,9 +4,11 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 from typing import Any, Dict, List, Optional
 
-from flask import Flask, abort, render_template, request
+from cachetools import TTLCache
+from flask import Flask, abort, jsonify, render_template, request
 
 from services.sync_client import SyncClient
 
@@ -21,6 +23,10 @@ def create_app() -> Flask:
 
     app = Flask(__name__, template_folder=template_folder, static_folder=static_folder)
     client = SyncClient()
+
+    # Simple TTL cache for sync service responses (avoids hammering on every page load)
+    _cache: TTLCache = TTLCache(maxsize=256, ttl=60)
+    app._response_cache = _cache
 
     def _normalize_list(value: Any) -> List[Any]:
         """Convert assorted list-ish values (JSON strings, dicts, scalars) into a clean list."""
@@ -120,7 +126,42 @@ def create_app() -> Flask:
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
+        # Content-Security-Policy: restrict script/style sources to self + known CDNs
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' https://code.jquery.com https://cdn.jsdelivr.net; "
+            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
+            "font-src 'self' https://cdnjs.cloudflare.com; "
+            "img-src 'self' data: https://github.com https://avatars.githubusercontent.com; "
+            "connect-src 'self'"
+        )
         return response
+
+    def _cached_repositories() -> List[Dict[str, Any]]:
+        """Return repositories with a short TTL cache to reduce sync service load."""
+        key = "repositories"
+        cached = _cache.get(key)
+        if cached is not None:
+            return cached
+        repos = client.get_repositories()
+        _cache[key] = repos
+        return repos
+
+    @app.route("/health", endpoint="health")
+    def health_view():
+        """Health check endpoint for load balancers and monitoring."""
+        status = {"status": "ok", "timestamp": time.time()}
+        try:
+            repos = client.get_repositories()
+            status["sync_service"] = "connected" if repos is not None else "error"
+            if client.last_error:
+                status["sync_service"] = "error"
+                status["sync_error"] = client.last_error
+        except Exception as exc:
+            status["sync_service"] = "error"
+            status["sync_error"] = str(exc)
+        code = 200 if status.get("sync_service") == "connected" else 503
+        return jsonify(status), code
 
     def group_repositories(repositories: List[Dict[str, Any]]) -> Dict[str, Dict[str, List[Dict[str, Any]]]]:
         grouped: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
@@ -183,6 +224,7 @@ def create_app() -> Flask:
             totals["open_prs"] += pr_value
         return totals
 
+    @app.route("/", endpoint="home")
     @app.route("/dashboard", endpoint="dashboard")
     def dashboard_view():
         data_type = request.args.get("type", "issues").lower()
@@ -200,7 +242,7 @@ def create_app() -> Flask:
             parts = selected_repo_lower.split("/")
             selected_repo_slug = "/".join(parts[-2:]) if len(parts) >= 2 else selected_repo_lower
 
-        repositories = client.get_repositories()
+        repositories = _cached_repositories()
         sync_error = client.last_error
         grouped = group_repositories(repositories)
         totals = compute_totals(repositories)
@@ -293,18 +335,156 @@ def create_app() -> Flask:
             sync_error=sync_error,
             sync_base_url=sync_base_url,
             state_counts=state_counts,
+            all_repositories=repositories,
         )
 
-    @app.route("/", endpoint="home")
     @app.route("/favorites", endpoint="favorites")
     def favorites_view():
-        repositories = client.get_repositories()
+        repositories = _cached_repositories()
         grouped = group_repositories(repositories)
         totals = compute_totals(repositories)
         return render_template(
             "favorites/index.html",
             grouped_repositories=grouped,
             totals=totals,
+        )
+
+    # -- Team analytics --------------------------------------------------
+    def _get_team_handles() -> List[str]:
+        """Return configured team GitHub handles from TEAM_HANDLES env var."""
+        raw = os.environ.get("TEAM_HANDLES", "")
+        return [h.strip().lower() for h in raw.split(",") if h.strip()]
+
+    def _extract_login(user: Any) -> Optional[str]:
+        """Pull a GitHub login from various payload shapes."""
+        if isinstance(user, str):
+            return user.lower()
+        if isinstance(user, dict):
+            login = user.get("login") or user.get("username") or user.get("name")
+            return login.lower() if login else None
+        return None
+
+    def _cached_all_work_items(repositories: List[Dict[str, Any]]) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Fetch all open issues and PRs across every repo (cached)."""
+        key = "all_work_items"
+        cached = _cache.get(key)
+        if cached is not None:
+            return cached
+
+        all_issues: List[Dict[str, Any]] = []
+        all_prs: List[Dict[str, Any]] = []
+        for repo in repositories:
+            repo_name = repo.get("repo", "")
+            issues = client.get_repository_issues(repo_name, state="open")
+            if isinstance(issues, list):
+                for i in issues:
+                    i.setdefault("repo", repo_name)
+                all_issues.extend(issues)
+            prs = client.get_repository_pull_requests(repo_name, state="open")
+            if isinstance(prs, list):
+                for p in prs:
+                    p.setdefault("repo", repo_name)
+                all_prs.extend(prs)
+
+        result = (all_issues, all_prs)
+        _cache[key] = result
+        return result
+
+    def _build_team_stats(
+        team_handles: List[str],
+        all_issues: List[Dict[str, Any]],
+        all_prs: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Aggregate stats per team member handle."""
+        members: Dict[str, Dict[str, Any]] = {}
+        for handle in team_handles:
+            members[handle] = {
+                "handle": handle,
+                "issues_assigned": [],
+                "prs_authored": [],
+                "prs_reviewing": [],
+                "repos_active": set(),
+            }
+
+        # Issues assigned to team members
+        for issue in all_issues:
+            assignees_raw = _normalize_list(issue.get("assignees"))
+            if not assignees_raw and issue.get("assignee"):
+                assignees_raw = _normalize_list(issue.get("assignee"))
+            for a in assignees_raw:
+                login = _extract_login(a)
+                if login and login in members:
+                    members[login]["issues_assigned"].append(issue)
+                    members[login]["repos_active"].add(issue.get("repo", ""))
+
+        # PRs authored by or reviewing by team members
+        for pr in all_prs:
+            author = _extract_login(
+                pr.get("user") or pr.get("user_login") or pr.get("author")
+            )
+            if author and author in members:
+                members[author]["prs_authored"].append(pr)
+                members[author]["repos_active"].add(pr.get("repo", ""))
+
+            reviewers_raw = _normalize_list(pr.get("requested_reviewers"))
+            if not reviewers_raw:
+                reviewers_raw = _normalize_list(pr.get("reviewers"))
+            for r in reviewers_raw:
+                login = _extract_login(r)
+                if login and login in members:
+                    members[login]["prs_reviewing"].append(pr)
+                    members[login]["repos_active"].add(pr.get("repo", ""))
+
+        # Build per-repo breakdown for each member
+        for m in members.values():
+            repo_issues: Dict[str, int] = {}
+            for issue in m["issues_assigned"]:
+                r = issue.get("repo", "unknown")
+                repo_issues[r] = repo_issues.get(r, 0) + 1
+            repo_prs: Dict[str, int] = {}
+            for pr in m["prs_authored"]:
+                r = pr.get("repo", "unknown")
+                repo_prs[r] = repo_prs.get(r, 0) + 1
+            m["issues_by_repo"] = dict(sorted(repo_issues.items(), key=lambda x: x[1], reverse=True))
+            m["prs_by_repo"] = dict(sorted(repo_prs.items(), key=lambda x: x[1], reverse=True))
+            m["repos_active"] = sorted(m["repos_active"])
+
+        # Sort members by total activity descending
+        member_list = sorted(
+            members.values(),
+            key=lambda m: len(m["issues_assigned"]) + len(m["prs_authored"]) + len(m["prs_reviewing"]),
+            reverse=True,
+        )
+        return {
+            "members": member_list,
+            "total_issues": len(all_issues),
+            "total_prs": len(all_prs),
+        }
+
+    @app.route("/team", endpoint="team")
+    def team_view():
+        team_handles = _get_team_handles()
+        repositories = _cached_repositories()
+        grouped = group_repositories(repositories)
+
+        if not team_handles:
+            return render_template(
+                "team.html",
+                grouped_repositories=grouped,
+                team_stats=None,
+                team_handles=[],
+                no_config=True,
+            )
+
+        all_issues, all_prs = _cached_all_work_items(repositories)
+        team_stats = _build_team_stats(team_handles, all_issues, all_prs)
+
+        return render_template(
+            "team.html",
+            grouped_repositories=grouped,
+            team_stats=team_stats,
+            team_handles=team_handles,
+            no_config=False,
         )
 
     return app

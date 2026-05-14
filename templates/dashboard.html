@@ -20,9 +20,96 @@
 {% endif %}
 
 {% if not active_repo %}
-    <div class="alert alert-info">
-        Select a repository from the navigation bar to load issues or pull requests.
+    <!-- Summary Overview -->
+    <div class="summary-header mb-4">
+        <h1 class="h3 mb-1"><i class="fas fa-tachometer-alt mr-2"></i>Dashboard Overview</h1>
+        <p class="text-muted mb-0">Select a repository from the navigation bar, or browse the summary below.</p>
     </div>
+
+    {% if all_repositories %}
+    <div class="row mb-4">
+        <div class="col-md-4 mb-3">
+            <div class="card summary-card h-100">
+                <div class="card-body text-center">
+                    <div class="summary-metric">{{ totals.repositories }}</div>
+                    <div class="summary-label">Repositories</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 mb-3">
+            <div class="card summary-card h-100" style="border-top-color: #22c55e;">
+                <div class="card-body text-center">
+                    <div class="summary-metric" style="color: #16a34a;">{{ totals.open_issues }}</div>
+                    <div class="summary-label">Open Issues</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 mb-3">
+            <div class="card summary-card h-100" style="border-top-color: #8b5cf6;">
+                <div class="card-body text-center">
+                    <div class="summary-metric" style="color: #7c3aed;">{{ totals.open_prs }}</div>
+                    <div class="summary-label">Open Pull Requests</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span><i class="fas fa-fire mr-2"></i>Most Active Repositories</span>
+            <span class="badge badge-secondary">{{ all_repositories|length }} total</span>
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-hover mb-0">
+                <thead class="thead-light">
+                    <tr>
+                        <th>Repository</th>
+                        <th class="text-center" style="width: 100px;">Issues</th>
+                        <th class="text-center" style="width: 100px;">PRs</th>
+                        <th class="text-center" style="width: 100px;">Total</th>
+                        <th style="width: 200px;"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for repo in all_repositories|sort(attribute='open_items_total', reverse=true) %}
+                    {% set ri = count_open(repo, 'issues')|int %}
+                    {% set rp = count_open(repo, 'prs')|int %}
+                    {% set rt = ri + rp %}
+                    {% if rt > 0 %}
+                    <tr>
+                        <td>
+                            <a href="{{ url_for('dashboard', repo=repo.repo, type='issues', state='open') }}" class="font-weight-bold">
+                                {{ repo.display_name or repo.repo }}
+                            </a>
+                            <br><small class="text-muted">{{ repo.repo }}</small>
+                        </td>
+                        <td class="text-center align-middle">
+                            {% if ri > 0 %}<span class="badge badge-pill" style="background: #dcfce7; color: #166534;">{{ ri }}</span>{% else %}<span class="text-muted">0</span>{% endif %}
+                        </td>
+                        <td class="text-center align-middle">
+                            {% if rp > 0 %}<span class="badge badge-pill" style="background: #ede9fe; color: #5b21b6;">{{ rp }}</span>{% else %}<span class="text-muted">0</span>{% endif %}
+                        </td>
+                        <td class="text-center align-middle font-weight-bold">{{ rt }}</td>
+                        <td class="align-middle">
+                            <div class="summary-bar">
+                                {% if rt > 0 %}
+                                <div class="summary-bar__issues" style="width: {{ (ri / rt * 100)|round }}%;" title="{{ ri }} issues"></div>
+                                <div class="summary-bar__prs" style="width: {{ (rp / rt * 100)|round }}%;" title="{{ rp }} PRs"></div>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+        No repositories loaded. Check your sync service connection.
+    </div>
+    {% endif %}
 {% else %}
     {% set banner_color = category_color(active_repo.main_category) if active_repo and active_repo.main_category is defined else '#0d6efd' %}
     {% set open_issues = count_open(active_repo, 'issues')|int %}

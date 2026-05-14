@@ -1,21 +1,35 @@
-/* Dedicated styling for reusable work items tables */
+/* Work Items Table - Component Styles */
+
+/* ─── Layout ───────────────────────────────────────────────────────────── */
 .work-items-table {
-    overflow-x: auto;
-    display: flex;
-    justify-content: center;
+    width: 100%;
+}
+
+.work-items-table .work-item-row:hover {
+    background-color: #f0f7ff !important;
 }
 
 .work-items-table .work-items-table-wrapper {
     width: 100%;
-    display: flex;
-    justify-content: center;
 }
 
 .work-items-table .table {
     width: 100%;
-    max-width: 1400px;
+    max-width: 100%;
     table-layout: fixed;
-    margin: 0 auto;
+}
+
+/* ─── Cells ────────────────────────────────────────────────────────────── */
+.work-items-table .follow-cell {
+    width: 44px;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.work-items-table .title-cell {
+    word-break: break-word;
+    white-space: normal;
+    max-width: 360px;
 }
 
 .work-items-table .table th,
@@ -24,67 +38,127 @@
     text-overflow: ellipsis;
 }
 
-.work-items-table .work-items-filters .work-items-search-group {
-    min-width: 240px;
-    max-width: 420px;
-    margin: 0;
-}
-
-.work-items-table .follow-cell {
-    width: 48px;
-    text-align: center;
-    white-space: nowrap;
-}
-
+/* ─── Follow Button ────────────────────────────────────────────────────── */
 .work-items-table .follow-btn {
     background: none;
     border: none;
-    color: #0d6efd;
+    color: #94a3b8;
     padding: 4px 6px;
     cursor: pointer;
-    transition: transform 0.1s ease;
+    font-size: 0.95rem;
+    transition: color 0.15s, transform 0.1s;
 }
 
 .work-items-table .follow-btn:hover {
-    transform: scale(1.08);
+    color: #2563eb;
+    transform: scale(1.15);
 }
 
+.work-items-table .follow-btn.active {
+    color: #2563eb;
+}
+
+/* ─── Search ───────────────────────────────────────────────────────────── */
+.work-items-table .work-items-filters th {
+    background: transparent;
+    border: none;
+    padding-top: 0.25rem;
+    padding-bottom: 0.5rem;
+}
+
+.work-items-table .work-items-search-group {
+    min-width: 200px;
+    max-width: 360px;
+}
+
+.work-items-table .work-items-filter {
+    font-size: 0.8rem;
+    height: calc(1.5em + 0.5rem + 2px);
+    padding: 0.25rem 0.5rem;
+    border-color: #e2e8f0;
+    color: #475569;
+}
+
+.work-items-table .work-items-filter:focus {
+    border-color: #93c5fd;
+    box-shadow: 0 0 0 0.15rem rgba(59, 130, 246, 0.15);
+}
+
+/* ─── Sorting ──────────────────────────────────────────────────────────── */
+.work-items-table .sortable {
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+}
+
+.work-items-table .sortable::after {
+    content: '\2195';
+    font-size: 0.7em;
+    margin-left: 4px;
+    color: #94a3b8;
+    opacity: 0.6;
+}
+
+.work-items-table .sortable:hover::after {
+    opacity: 1;
+}
+
+.work-items-table .sortable.active-asc::after {
+    content: '\2191';
+    color: #2563eb;
+    opacity: 1;
+}
+
+.work-items-table .sortable.active-desc::after {
+    content: '\2193';
+    color: #2563eb;
+    opacity: 1;
+}
+
+/* ─── Pagination ───────────────────────────────────────────────────────── */
 .work-items-table .work-items-pagination {
     width: 100%;
-    margin-top: 0.25rem;
-    display: flex;
-    justify-content: center;
-    text-align: center;
-}
-
-.work-items-table .work-items-pagination .btn-group .btn {
-    min-width: 90px;
 }
 
 .work-items-table .work-items-status {
-    text-align: left;
+    font-size: 0.8rem;
+    color: #64748b;
 }
 
-.work-items-table .sortable {
-    cursor: pointer;
+.work-items-table .work-items-pagination .btn {
+    min-width: 80px;
+    font-size: 0.8rem;
 }
 
-.work-items-table .sortable:after {
-    content: '\2195';
-    font-size: 0.8em;
-    margin-left: 6px;
-    color: #6c757d;
+/* ─── PR Status Badges ─────────────────────────────────────────────────── */
+.badge-pr-open {
+    background-color: #dcfce7;
+    color: #166534;
+    border: 1px solid #86efac;
+    font-weight: 600;
+    font-size: 0.72rem;
 }
 
-.work-items-table .sortable.active-asc:after {
-    content: '\2191';
+.badge-pr-merged {
+    background-color: #f3e8ff;
+    color: #6b21a8;
+    border: 1px solid #c4b5fd;
+    font-weight: 600;
+    font-size: 0.72rem;
 }
 
-.work-items-table .sortable.active-desc:after {
-    content: '\2193';
+.badge-pr-closed {
+    background-color: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #fca5a5;
+    font-weight: 600;
+    font-size: 0.72rem;
 }
 
-.work-items-table .title-cell {
-    word-break: break-word;
-    max-width: 360px;
+.badge-pr-draft {
+    background-color: #f1f5f9;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+    font-weight: 600;
+    font-size: 0.72rem;
 }
