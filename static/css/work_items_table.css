@@ -6,7 +6,7 @@
 }
 
 .work-items-table .work-item-row:hover {
-    background-color: #f0f7ff !important;
+    background-color: var(--bg-hover, #f0f7ff) !important;
 }
 
 .work-items-table .work-items-table-wrapper {
@@ -49,6 +49,10 @@
     transition: color 0.15s, transform 0.1s;
 }
 
+.work-items-table .follow-btn::before {
+    content: '\2606'; /* ☆ */
+}
+
 .work-items-table .follow-btn:hover {
     color: #2563eb;
     transform: scale(1.15);
@@ -56,6 +60,10 @@
 
 .work-items-table .follow-btn.active {
     color: #2563eb;
+}
+
+.work-items-table .follow-btn.active::before {
+    content: '\2605'; /* ★ */
 }
 
 /* ─── Search ───────────────────────────────────────────────────────────── */
@@ -162,3 +170,71 @@
     font-weight: 600;
     font-size: 0.72rem;
 }
+
+/* ─── Row Color Coding (type + state) ──────────────────────────────────── */
+/* Issues: green tint */
+.work-item-row--issues {
+    border-left: 3px solid #86efac;
+    background-color: #f0fdf4 !important;
+}
+.work-item-row--issues:hover {
+    background-color: #dcfce7 !important;
+}
+/* Closed issues: darker green */
+.work-item-row--issues.work-item-row--closed {
+    border-left-color: #4ade80;
+    background-color: #dcfce7 !important;
+    opacity: 0.75;
+}
+.work-item-row--issues.work-item-row--closed:hover {
+    opacity: 1;
+}
+
+/* PRs: purple tint */
+.work-item-row--prs {
+    border-left: 3px solid #c4b5fd;
+    background-color: #faf5ff !important;
+}
+.work-item-row--prs:hover {
+    background-color: #f3e8ff !important;
+}
+/* Closed PRs: darker purple */
+.work-item-row--prs.work-item-row--closed {
+    border-left-color: #a78bfa;
+    background-color: #ede9fe !important;
+    opacity: 0.75;
+}
+.work-item-row--prs.work-item-row--closed:hover {
+    opacity: 1;
+}
+
+/* ─── Filter Bar ───────────────────────────────────────────────────────── */
+.filter-select {
+    border-color: #e2e8f0;
+    color: #334155;
+    font-weight: 500;
+    font-size: 0.8rem;
+    border-radius: 5px;
+    padding: 0.25rem 1.75rem 0.25rem 0.5rem;
+}
+
+.filter-select:focus {
+    border-color: #93c5fd;
+    box-shadow: 0 0 0 0.15rem rgba(59, 130, 246, 0.15);
+}
+
+.filter-separator {
+    display: inline-block;
+    width: 1px;
+    height: 24px;
+    background: #e2e8f0;
+    margin: 0 0.25rem;
+    vertical-align: middle;
+}
+
+/* ─── Age Cell Recency ─────────────────────────────────────────────────── */
+.age-cell--today  { color: #15803d; font-weight: 600; }
+.age-cell--week   { color: #166534; }
+.age-cell--month  { color: #64748b; }
+.age-cell--stale  { color: #d97706; }
+.age-cell--old    { color: #dc2626; font-weight: 600; }

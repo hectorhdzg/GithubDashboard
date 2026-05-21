@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Notifications | GitHub Issues Dashboard{% endblock %}
+
+{% block extra_head %}
+{{ super() }}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/work_items_table.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-header mb-4">
+    <div>
+        <h1 class="h3 mb-0">Notifications</h1>
+        <p class="text-muted mb-0">Activity on issues and PRs that involve you.</p>
+    </div>
+</div>
+
+<div id="notifications-setup" style="display:none;">
+    <div class="alert alert-info">
+        <strong>Set your GitHub username</strong> to see notifications.
+        Click the &#9881; button in the navbar to configure it.
+    </div>
+</div>
+
+<div id="notifications-container" style="display:none;">
+    <div class="card shadow-sm mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span>Activity for <strong id="notifications-user"></strong></span>
+        </div>
+        <div class="card-body">
+            <div class="alert alert-secondary mb-0">
+                Notifications will appear here once the data service supports activity feeds. Check back soon.
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var user = localStorage.getItem('githubUser') || '';
+    var setup = document.getElementById('notifications-setup');
+    var container = document.getElementById('notifications-container');
+    var userSpan = document.getElementById('notifications-user');
+
+    if (!user) {
+        setup.style.display = '';
+        container.style.display = 'none';
+    } else {
+        setup.style.display = 'none';
+        container.style.display = '';
+        userSpan.textContent = '@' + user;
+    }
+});
+</script>
+{% endblock %}

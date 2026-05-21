@@ -4,7 +4,11 @@ from __future__ import annotations
 import json
 import logging
 import os
+
+from dotenv import load_dotenv
+load_dotenv()
 import time
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from cachetools import TTLCache
@@ -224,6 +228,79 @@ def create_app() -> Flask:
             totals["open_prs"] += pr_value
         return totals
 
+    # -- Shared date-filtering helpers -----------------------------------
+    _PRESET_DAYS = {"1w": 7, "2w": 14, "1m": 30, "3m": 90}
+
+    def _parse_date_params(default_preset: str = "") -> tuple[str, str, str, Optional[datetime], Optional[datetime]]:
+        """Parse date_preset / date_from / date_to from request.args.
+
+        Args:
+            default_preset: Preset to apply when no date params in URL.
+                            Empty string means no date filtering.
+
+        Returns (date_preset, date_from_str, date_to_str, date_from_dt, date_to_dt).
+        date_from_dt / date_to_dt are None when no date filter is active.
+        """
+        date_preset = request.args.get("date_preset", "")
+        date_from_str = request.args.get("date_from", "")
+        date_to_str = request.args.get("date_to", "")
+        now = datetime.now(timezone.utc)
+
+        # Distinguish "no date params at all" (apply default) from
+        # "date_preset explicitly empty" (user chose All-time).
+        has_explicit_date_param = "date_preset" in request.args or "date_from" in request.args or "date_to" in request.args
+        if not has_explicit_date_param:
+            date_preset = default_preset
+
+        if date_preset in _PRESET_DAYS:
+            date_from_dt = now - timedelta(days=_PRESET_DAYS[date_preset])
+            date_to_dt = now
+            date_from_str = date_from_dt.strftime("%Y-%m-%d")
+            date_to_str = date_to_dt.strftime("%Y-%m-%d")
+        elif date_preset == "custom" or date_from_str or date_to_str:
+            date_preset = "custom"
+            if date_from_str:
+                try:
+                    date_from_dt = datetime.strptime(date_from_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                except ValueError:
+                    date_from_dt = now - timedelta(days=7)
+                    date_from_str = date_from_dt.strftime("%Y-%m-%d")
+            else:
+                date_from_dt = now - timedelta(days=7)
+                date_from_str = date_from_dt.strftime("%Y-%m-%d")
+
+            if date_to_str:
+                try:
+                    date_to_dt = datetime.strptime(date_to_str, "%Y-%m-%d").replace(tzinfo=timezone.utc, hour=23, minute=59, second=59)
+                except ValueError:
+                    date_to_dt = now
+                    date_to_str = now.strftime("%Y-%m-%d")
+            else:
+                date_to_dt = now
+                date_to_str = now.strftime("%Y-%m-%d")
+        else:
+            # No date filter active
+            date_from_dt = None
+            date_to_dt = None
+
+        return date_preset, date_from_str, date_to_str, date_from_dt, date_to_dt
+
+    def _in_date_range(item: Dict[str, Any], date_from: Optional[datetime], date_to: Optional[datetime]) -> bool:
+        """Check if an item's created_at falls within [date_from, date_to].
+
+        Returns True (include everything) when either bound is None.
+        """
+        if date_from is None or date_to is None:
+            return True
+        raw = item.get("created_at") or item.get("updated_at") or ""
+        if not raw:
+            return False
+        try:
+            dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            return date_from <= dt <= date_to
+        except (ValueError, TypeError):
+            return False
+
     @app.route("/", endpoint="home")
     @app.route("/dashboard", endpoint="dashboard")
     def dashboard_view():
@@ -236,6 +313,12 @@ def create_app() -> Flask:
             state = "open"
 
         selected_repo = request.args.get("repo")
+        filter_author = request.args.get("author", "").strip().lower()
+        filter_assignee = request.args.get("assignee", "").strip().lower()
+
+        # Date filtering — default to 1w everywhere
+        date_preset, date_from_str, date_to_str, date_from_dt, date_to_dt = _parse_date_params(default_preset="1w")
+
         selected_repo_lower = selected_repo.lower() if selected_repo else None
         selected_repo_slug = None
         if selected_repo_lower:
@@ -244,14 +327,43 @@ def create_app() -> Flask:
 
         repositories = _cached_repositories()
         sync_error = client.last_error
+        if sync_error:
+            logger.warning("Sync service error: %s (url=%s)", sync_error, client.base_url)
         grouped = group_repositories(repositories)
-        totals = compute_totals(repositories)
-        sync_base_url = client.base_url
 
         active_repo: Optional[Dict[str, Any]] = None
         work_items: List[Dict[str, Any]] = []
         data_error: Optional[str] = None
         state_counts: Dict[str, int] = {"open": 0, "closed": 0, "all": 0}
+        filtered_issue_count = 0
+        filtered_pr_count = 0
+
+        # When on the overview page (no repo selected) and date filtering is active,
+        # compute counts from actual work items so totals match the date range.
+        if not selected_repo and date_from_dt is not None:
+            all_issues, all_prs = _cached_all_work_items(repositories)
+            filtered_issues = [i for i in all_issues if _in_date_range(i, date_from_dt, date_to_dt)]
+            filtered_prs = [p for p in all_prs if _in_date_range(p, date_from_dt, date_to_dt)]
+
+            # Per-repo counts for the overview table
+            repo_issue_counts: Dict[str, int] = {}
+            repo_pr_counts: Dict[str, int] = {}
+            for i in filtered_issues:
+                r = i.get("repo", "")
+                repo_issue_counts[r] = repo_issue_counts.get(r, 0) + 1
+            for p in filtered_prs:
+                r = p.get("repo", "")
+                repo_pr_counts[r] = repo_pr_counts.get(r, 0) + 1
+
+            totals = {
+                "repositories": len(repositories),
+                "open_issues": len(filtered_issues),
+                "open_prs": len(filtered_prs),
+            }
+        else:
+            totals = compute_totals(repositories)
+            repo_issue_counts = {}
+            repo_pr_counts = {}
 
         if selected_repo:
             active_repo = next((r for r in repositories if r.get("repo") == selected_repo), None)
@@ -295,9 +407,33 @@ def create_app() -> Flask:
 
                     return False
 
-                work_items = [item for item in data if _match_repo(item)] or data
+                work_items = [item for item in data if _match_repo(item)]
                 if not work_items and data:
-                    data_error = "No items matched the selected repository."
+                    # Log for debugging but do NOT fall back to unfiltered data
+                    logger.warning("No items matched repo filter for %s (%d raw items)", selected_repo, len(data))
+
+                # Filter by author (PR) or assignee (issue) if specified
+                if filter_author:
+                    def _match_author(item: Dict[str, Any]) -> bool:
+                        user = item.get("user") or item.get("user_login") or item.get("author")
+                        login = _extract_login(user)
+                        return login == filter_author if login else False
+                    work_items = [item for item in work_items if _match_author(item)]
+
+                if filter_assignee:
+                    def _match_assignee(item: Dict[str, Any]) -> bool:
+                        assignees_raw = _normalize_list(item.get("assignees"))
+                        if not assignees_raw and item.get("assignee"):
+                            assignees_raw = _normalize_list(item.get("assignee"))
+                        for a in assignees_raw:
+                            login = _extract_login(a)
+                            if login == filter_assignee:
+                                return True
+                        return False
+                    work_items = [item for item in work_items if _match_assignee(item)]
+
+                # Apply date filter
+                work_items = [item for item in work_items if _in_date_range(item, date_from_dt, date_to_dt)]
 
                 # Track counts by state for chips
                 for item in work_items:
@@ -322,6 +458,29 @@ def create_app() -> Flask:
                 work_items = []
                 data_error = "Unable to load data from sync service."
 
+            # Compute actual filtered counts for the repo-detail badge chips.
+            # These reflect what the user can really see after all filters are applied.
+            filtered_issue_count = 0
+            filtered_pr_count = 0
+            if active_repo:
+                # Count for the current data_type from filtered work_items
+                current_count = len(work_items)
+                # Also fetch the OTHER type and apply the same repo + date filter
+                if data_type == "issues":
+                    filtered_issue_count = current_count
+                    other_data = client.get_repository_pull_requests(selected_repo, state=state)
+                    if isinstance(other_data, list):
+                        other_items = [i for i in other_data if _match_repo(i)]
+                        other_items = [i for i in other_items if _in_date_range(i, date_from_dt, date_to_dt)]
+                        filtered_pr_count = len(other_items)
+                else:
+                    filtered_pr_count = current_count
+                    other_data = client.get_repository_issues(selected_repo, state=state)
+                    if isinstance(other_data, list):
+                        other_items = [i for i in other_data if _match_repo(i)]
+                        other_items = [i for i in other_items if _in_date_range(i, date_from_dt, date_to_dt)]
+                        filtered_issue_count = len(other_items)
+
         return render_template(
             "dashboard.html",
             grouped_repositories=grouped,
@@ -333,9 +492,17 @@ def create_app() -> Flask:
             work_items=work_items,
             data_error=data_error,
             sync_error=sync_error,
-            sync_base_url=sync_base_url,
             state_counts=state_counts,
             all_repositories=repositories,
+            filter_author=filter_author,
+            filter_assignee=filter_assignee,
+            date_preset=date_preset,
+            date_from=date_from_str,
+            date_to=date_to_str,
+            repo_issue_counts=repo_issue_counts,
+            repo_pr_counts=repo_pr_counts,
+            filtered_issue_count=filtered_issue_count,
+            filtered_pr_count=filtered_pr_count,
         )
 
     @app.route("/favorites", endpoint="favorites")
@@ -345,6 +512,17 @@ def create_app() -> Flask:
         totals = compute_totals(repositories)
         return render_template(
             "favorites/index.html",
+            grouped_repositories=grouped,
+            totals=totals,
+        )
+
+    @app.route("/notifications", endpoint="notifications")
+    def notifications_view():
+        repositories = _cached_repositories()
+        grouped = group_repositories(repositories)
+        totals = compute_totals(repositories)
+        return render_template(
+            "notifications/index.html",
             grouped_repositories=grouped,
             totals=totals,
         )
@@ -364,6 +542,15 @@ def create_app() -> Flask:
             return login.lower() if login else None
         return None
 
+    def _item_key(item: Dict[str, Any]) -> str:
+        """Build a dedup key from an issue or PR."""
+        url = item.get("html_url") or item.get("url") or ""
+        if url:
+            return url
+        repo = item.get("repo", "")
+        number = item.get("number", "")
+        return f"{repo}#{number}" if number else ""
+
     def _cached_all_work_items(repositories: List[Dict[str, Any]]) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """Fetch all open issues and PRs across every repo (cached)."""
         key = "all_work_items"
@@ -373,18 +560,32 @@ def create_app() -> Flask:
 
         all_issues: List[Dict[str, Any]] = []
         all_prs: List[Dict[str, Any]] = []
+        seen_issues: set = set()
+        seen_prs: set = set()
         for repo in repositories:
             repo_name = repo.get("repo", "")
             issues = client.get_repository_issues(repo_name, state="open")
             if isinstance(issues, list):
                 for i in issues:
                     i.setdefault("repo", repo_name)
-                all_issues.extend(issues)
+                    i["labels"] = _enrich_labels(_normalize_list(i.get("labels")))
+                    k = _item_key(i)
+                    if k and k in seen_issues:
+                        continue
+                    if k:
+                        seen_issues.add(k)
+                    all_issues.append(i)
             prs = client.get_repository_pull_requests(repo_name, state="open")
             if isinstance(prs, list):
                 for p in prs:
                     p.setdefault("repo", repo_name)
-                all_prs.extend(prs)
+                    p["labels"] = _enrich_labels(_normalize_list(p.get("labels")))
+                    k = _item_key(p)
+                    if k and k in seen_prs:
+                        continue
+                    if k:
+                        seen_prs.add(k)
+                    all_prs.append(p)
 
         result = (all_issues, all_prs)
         _cache[key] = result
@@ -474,10 +675,20 @@ def create_app() -> Flask:
                 team_stats=None,
                 team_handles=[],
                 no_config=True,
+                date_from="",
+                date_to="",
+                date_preset="1w",
             )
 
+        # Date filtering — team always defaults to 1w
+        date_preset, date_from_str, date_to_str, date_from_dt, date_to_dt = _parse_date_params(default_preset="1w")
+
         all_issues, all_prs = _cached_all_work_items(repositories)
-        team_stats = _build_team_stats(team_handles, all_issues, all_prs)
+
+        filtered_issues = [i for i in all_issues if _in_date_range(i, date_from_dt, date_to_dt)]
+        filtered_prs = [p for p in all_prs if _in_date_range(p, date_from_dt, date_to_dt)]
+
+        team_stats = _build_team_stats(team_handles, filtered_issues, filtered_prs)
 
         return render_template(
             "team.html",
@@ -485,6 +696,9 @@ def create_app() -> Flask:
             team_stats=team_stats,
             team_handles=team_handles,
             no_config=False,
+            date_from=date_from_str,
+            date_to=date_to_str,
+            date_preset=date_preset,
         )
 
     return app

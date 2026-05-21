@@ -1,5 +1,6 @@
 # Python
 __pycache__/
+**/__pycache__/
 *.py[cod]
 *.pyo
 *.pyd
@@ -12,10 +13,10 @@ __pycache__/
 .coverage*
 dist/
 build/
-src/__pycache__/
 
 # Environments
 .venv/
+.env
 .env/
 env/
 venv/
@@ -33,6 +34,9 @@ yarn-error.log*
 *.swo
 .DS_Store
 Thumbs.db
+
+# Agent/AI config
+.agents.md
 
 # Logs
 *.log

@@ -459,14 +459,18 @@ class TestDashboardRoute(AppHelperTestBase):
 
     def test_dashboard_valid_repo_issues(self):
         items = [{'number': 1, 'title': 'Bug', 'state': 'open',
-                  'repo': 'org/myrepo', 'labels': [], 'updated_at': '2025-01-01'}]
+                  'repo': 'org/myrepo', 'labels': [],
+                  'created_at': '2026-05-19T10:00:00Z',
+                  'updated_at': '2026-05-19T10:00:00Z'}]
         response = self._get('/dashboard?repo=org/myrepo&type=issues', items=items)
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'Bug', response.data)
 
     def test_dashboard_valid_repo_prs(self):
         items = [{'number': 10, 'title': 'Feature PR', 'state': 'open',
-                  'repo': 'org/myrepo', 'labels': [], 'updated_at': '2025-01-01'}]
+                  'repo': 'org/myrepo', 'labels': [],
+                  'created_at': '2026-05-19T10:00:00Z',
+                  'updated_at': '2026-05-19T10:00:00Z'}]
         response = self._get('/dashboard?repo=org/myrepo&type=prs', items=items)
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'Feature PR', response.data)

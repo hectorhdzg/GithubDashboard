@@ -71,37 +71,43 @@
     {% endif %}
 {% endmacro %}
 
-{% macro render_work_items_table(active_repo, work_items, data_type) %}
+{% macro render_work_items_table(active_repo, work_items, data_type, compact=false) %}
+{# active_repo: repo dict (single-repo view) or None (multi-repo view, uses item.repo)
+   compact: if true, smaller page size for inline tables #}
+{% set multi_repo = (active_repo is none) %}
+{% set item_repo_name = '' if multi_repo else active_repo.repo %}
+{% set item_repo_display = '' if multi_repo else (active_repo.display_name or active_repo.repo) %}
+{% set page_size = 5 if compact else 10 %}
 <div class="card shadow-sm">
-    <div class="card-body">
-        <div class="work-items-table" data-page-size="10">
+    <div class="card-body{{ ' p-2' if compact }}">
+        <div class="work-items-table" data-page-size="{{ page_size }}">
             <div class="table-responsive work-items-table-wrapper">
                 <table class="table table-striped table-hover align-middle">
                     <thead class="thead-light">
                         <tr>
-                            <th scope="col" class="text-nowrap follow-cell"><i class="fas fa-bookmark"></i></th>
+                            <th scope="col" class="text-nowrap follow-cell">Follow</th>
                             <th scope="col" class="text-nowrap sortable" data-sort-key="number">#</th>
                             <th scope="col" class="sortable" data-sort-key="title" style="min-width: 260px;">Title</th>
+                            {% if multi_repo %}
+                            <th scope="col" class="sortable" data-sort-key="repo" style="min-width: 140px;">Repository</th>
+                            {% endif %}
                             <th scope="col" class="sortable" data-sort-key="state">State</th>
                             <th scope="col" class="sortable" data-sort-key="labels" style="min-width: 180px;">Labels</th>
                             {% if data_type == 'prs' %}
                                 <th scope="col" class="sortable" data-sort-key="author">Author</th>
                                 <th scope="col" class="sortable" data-sort-key="reviewers">Reviewers</th>
-                                <th scope="col" class="sortable" data-sort-key="updated">Updated</th>
                             {% else %}
                                 <th scope="col" class="sortable" data-sort-key="author">Author</th>
                                 <th scope="col" class="sortable" data-sort-key="assignees" style="min-width: 160px;">Assignees</th>
-                                <th scope="col" class="sortable" data-sort-key="updated">Updated</th>
                             {% endif %}
+                            <th scope="col" class="sortable" data-sort-key="created">Created</th>
+                            <th scope="col" class="sortable" data-sort-key="updated">Updated</th>
                         </tr>
                         <tr class="work-items-filters">
                             <th></th>
                             <th></th>
-                            <th colspan="2" class="p-1">
+                            <th colspan="{{ 3 if multi_repo else 2 }}" class="p-1">
                                 <div class="input-group input-group-sm work-items-search-group">
-                                    <div class="input-group-prepend">
-                                        <span class="input-group-text"><i class="fas fa-search"></i></span>
-                                    </div>
                                     <input type="search" class="form-control work-items-search" placeholder="Search title, labels, users...">
                                 </div>
                             </th>
@@ -121,17 +127,21 @@
                                 </select>
                             </th>
                             <th></th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for item in work_items %}
-                            <tr class="work-item-row" style="cursor: pointer;"
+                            {% set item_state = (item.state or '')|lower %}
+                            {% set row_repo = item.repo if multi_repo else item_repo_name %}
+                            {% set row_repo_display = item.repo if multi_repo else item_repo_display %}
+                            <tr class="work-item-row work-item-row--{{ data_type }} work-item-row--{{ item_state }}" style="cursor: pointer;"
                                 data-item-number="{{ item.number }}"
                                 data-item-title="{{ item.title }}"
                                 data-item-state="{{ item.state }}"
                                 data-item-url="{{ item.html_url or item.get('url') }}"
-                                data-item-repo="{{ active_repo.repo }}"
-                                data-item-repo-display="{{ active_repo.display_name or active_repo.repo }}"
+                                data-item-repo="{{ row_repo }}"
+                                data-item-repo-display="{{ row_repo_display }}"
                                 data-item-type="{{ 'prs' if data_type == 'prs' else 'issues' }}"
                                 data-item-author="{{ item.user_login or (item.user.login if item.user is mapping else item.user) or (item.author.login if item.author is mapping else item.author) or '' }}"
                                 data-item-created="{{ item.created_at or item.created or '' }}"
@@ -141,8 +151,8 @@
                                 data-item-draft="{{ item.draft or '' }}">
                                 <td class="follow-cell">
                                     <button class="follow-btn" title="Follow / unfollow"
-                                        data-repo="{{ active_repo.repo }}"
-                                        data-repo-display="{{ active_repo.display_name or active_repo.repo }}"
+                                        data-repo="{{ row_repo }}"
+                                        data-repo-display="{{ row_repo_display }}"
                                         data-number="{{ item.number }}"
                                         data-title="{{ item.title }}"
                                         data-type="{{ 'prs' if data_type == 'prs' else 'issues' }}"
@@ -150,21 +160,25 @@
                                         data-url="{{ item.html_url or item.get('url') }}"
                                         data-updated="{{ item.updated_at or item.updated }}"
                                         data-created="{{ item.created_at or item.created }}">
-                                        <i class="far fa-bookmark"></i>
                                     </button>
                                 </td>
                                 <td data-field="number" data-value="{{ item.number }}"><a href="{{ item.html_url or item.get('url') }}" target="_blank">#{{ item.number }}</a></td>
                                 <td class="align-middle title-cell" data-field="title">{{ item.title }}</td>
+                                {% if multi_repo %}
+                                <td class="align-middle text-nowrap small" data-field="repo">
+                                    <a href="https://github.com/{{ item.repo }}" target="_blank" class="text-muted">{{ (item.repo or '').split('/')[-1] }}</a>
+                                </td>
+                                {% endif %}
                                 <td class="align-middle text-nowrap text-capitalize" data-field="state">
                                     {% if data_type == 'prs' %}
                                         {% if item.merged or item.merged_at %}
-                                            <span class="badge badge-pr-merged"><i class="fas fa-code-merge"></i> Merged</span>
+                                            <span class="badge badge-pr-merged">Merged</span>
                                         {% elif item.draft %}
-                                            <span class="badge badge-pr-draft"><i class="fas fa-pencil-alt"></i> Draft</span>
+                                            <span class="badge badge-pr-draft">Draft</span>
                                         {% elif item.state == 'open' %}
-                                            <span class="badge badge-pr-open"><i class="fas fa-code-branch"></i> Open</span>
+                                            <span class="badge badge-pr-open">Open</span>
                                         {% else %}
-                                            <span class="badge badge-pr-closed"><i class="fas fa-times-circle"></i> Closed</span>
+                                            <span class="badge badge-pr-closed">Closed</span>
                                         {% endif %}
                                     {% else %}
                                         {{ item.state }}
@@ -174,22 +188,22 @@
                                 {% if data_type == 'prs' %}
                                     <td class="align-middle" data-field="author">{{ work_item_author(item) }}</td>
                                     <td class="align-middle" data-field="reviewers">{{ render_users(item.requested_reviewers or item.reviewers) }}</td>
-                                    <td class="align-middle text-nowrap" data-field="updated" data-value="{{ item.updated_at or item.updated }}">
-                                        <span class="age-text" data-timestamp="{{ item.updated_at or item.updated }}">{{ item.updated_at or item.updated }}</span>
-                                    </td>
                                 {% else %}
                                     <td class="align-middle" data-field="author">{{ work_item_author(item) }}</td>
                                     <td class="align-middle" data-field="assignees">{{ render_users(item.assignees if item.assignees is defined else [item.assignee] if item.assignee else []) }}</td>
-                                    <td class="align-middle text-nowrap" data-field="updated" data-value="{{ item.updated_at or item.updated }}">
-                                        <span class="age-text" data-timestamp="{{ item.updated_at or item.updated }}">{{ item.updated_at or item.updated }}</span>
-                                    </td>
                                 {% endif %}
+                                <td class="align-middle text-nowrap" data-field="created" data-value="{{ item.created_at or item.created or '' }}">
+                                    <span class="age-text" data-timestamp="{{ item.created_at or item.created or '' }}">{{ item.created_at or item.created or '' }}</span>
+                                </td>
+                                <td class="align-middle text-nowrap" data-field="updated" data-value="{{ item.updated_at or item.updated }}">
+                                    <span class="age-text" data-timestamp="{{ item.updated_at or item.updated }}">{{ item.updated_at or item.updated }}</span>
+                                </td>
                             </tr>
                         {% endfor %}
                     </tbody>
                     <tfoot>
                         <tr>
-                            <td colspan="8" class="p-2">
+                            <td colspan="{{ 10 if multi_repo else 9 }}" class="p-2">
                                 <div class="work-items-pagination">
                                     <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-md-between">
                                         <div class="work-items-status small text-muted mb-2 mb-md-0"></div>
@@ -214,7 +228,6 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="workItemModalLabel">
-                    <span id="modal-type-icon"></span>
                     <span id="modal-title-text"></span>
                 </h5>
                 <button type="button" class="close" data-dismiss="modal" aria-label="Close">
@@ -256,7 +269,7 @@
             </div>
             <div class="modal-footer">
                 <a id="modal-github-link" href="#" target="_blank" class="btn btn-primary btn-sm">
-                    <i class="fab fa-github mr-1"></i> View on GitHub
+                    View on GitHub
                 </a>
                 <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Close</button>
             </div>

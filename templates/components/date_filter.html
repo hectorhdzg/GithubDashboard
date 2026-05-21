@@ -1,0 +1,95 @@
+{#
+  Unified filter bar.
+  Combines type/state selectors, date range presets, and active filter badges
+  in a single card above the data grid.
+
+  Required:
+    date_preset  – "" | "1w" | "2w" | "1m" | "custom"  (empty = all time / no filter)
+    date_from    – YYYY-MM-DD string
+    date_to      – YYYY-MM-DD string
+    form_action  – URL for form action (e.g. url_for('team') or url_for('dashboard'))
+  Optional:
+    extra_hidden – dict of extra hidden fields to preserve (e.g. {"repo": "org/repo"})
+    show_all_time – boolean, whether to show "All time" button (default false)
+    show_type_state – boolean, whether to show Type/State dropdowns (default false)
+    current_type – "issues" | "prs"  (only used when show_type_state=true)
+    current_state – "open" | "closed" | "all"  (only used when show_type_state=true)
+    active_filters – list of dicts with keys: label, value, color, bg, clear_url, icon
+#}
+{% macro date_filter_card(date_preset, date_from, date_to, form_action, extra_hidden={}, show_all_time=false, active_filters=[], show_type_state=false, current_type='issues', current_state='open') %}
+<div class="card shadow-sm mb-3" id="dateFilterCard">
+    <div class="card-body py-2 px-3">
+        <form method="get" action="{{ form_action }}" id="dateFilterForm" class="d-flex align-items-center flex-wrap" style="gap:.5rem;">
+            {% for key, val in extra_hidden.items() %}
+            <input type="hidden" name="{{ key }}" value="{{ val }}">
+            {% endfor %}
+
+            {% if show_type_state %}
+            <select name="type" class="custom-select custom-select-sm filter-select" style="width:auto;" onchange="this.form.submit()">
+                <option value="issues"{{ ' selected' if current_type == 'issues' }}>Issues</option>
+                <option value="prs"{{ ' selected' if current_type == 'prs' }}>Pull Requests</option>
+            </select>
+            <select name="state" class="custom-select custom-select-sm filter-select" style="width:auto;" onchange="this.form.submit()">
+                <option value="open"{{ ' selected' if current_state == 'open' }}>Open</option>
+                <option value="closed"{{ ' selected' if current_state == 'closed' }}>Closed</option>
+                <option value="all"{{ ' selected' if current_state == 'all' }}>All states</option>
+            </select>
+            <span class="filter-separator"></span>
+            {% endif %}
+
+            <input type="hidden" name="date_preset" id="date_preset" value="{{ date_preset }}">
+            <div class="btn-group btn-group-sm" role="group">
+                {% if show_all_time %}
+                <button type="button" class="btn btn-preset {{ 'btn-primary' if not date_preset else 'btn-outline-secondary' }}" data-preset="">All time</button>
+                {% endif %}
+                <button type="button" class="btn btn-preset {{ 'btn-primary' if date_preset == '1w' else 'btn-outline-secondary' }}" data-preset="1w">1w</button>
+                <button type="button" class="btn btn-preset {{ 'btn-primary' if date_preset == '2w' else 'btn-outline-secondary' }}" data-preset="2w">2w</button>
+                <button type="button" class="btn btn-preset {{ 'btn-primary' if date_preset == '1m' else 'btn-outline-secondary' }}" data-preset="1m">1m</button>
+                <button type="button" class="btn btn-preset {{ 'btn-primary' if date_preset == '3m' else 'btn-outline-secondary' }}" data-preset="3m">3m</button>
+                <button type="button" class="btn btn-preset {{ 'btn-primary' if date_preset == 'custom' else 'btn-outline-secondary' }}" data-preset="custom">Custom</button>
+            </div>
+            <div id="customDateRange" class="form-inline" style="display:{{ 'flex' if date_preset == 'custom' else 'none' }};gap:.5rem;align-items:center;">
+                <input type="date" class="form-control form-control-sm" id="date_from" name="date_from" value="{{ date_from }}">
+                <span class="text-muted">to</span>
+                <input type="date" class="form-control form-control-sm" id="date_to" name="date_to" value="{{ date_to }}">
+                <button type="submit" class="btn btn-primary btn-sm">Apply</button>
+            </div>
+
+            {% if active_filters %}
+            <span class="filter-separator"></span>
+            <span class="d-flex align-items-center flex-wrap" style="gap:.4rem;">
+                {% for f in active_filters %}
+                <span class="badge badge-pill d-inline-flex align-items-center" style="background:{{ f.bg }};color:{{ f.color }};font-size:.8rem;padding:.35em .65em .35em .55em;">
+                    {{ f.label }}: <strong class="ml-1">{{ f.value }}</strong>
+                    <a href="{{ f.clear_url }}" class="ml-1 text-decoration-none" style="color:{{ f.color }};opacity:.6;font-size:.85rem;line-height:1;" title="Remove filter">&times;</a>
+                </span>
+                {% endfor %}
+            </span>
+            {% endif %}
+        </form>
+    </div>
+</div>
+<script>
+(function() {
+    var form = document.getElementById('dateFilterForm');
+    var presetInput = document.getElementById('date_preset');
+    var customRange = document.getElementById('customDateRange');
+    var buttons = form.querySelectorAll('.btn-preset');
+    buttons.forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var preset = btn.getAttribute('data-preset');
+            presetInput.value = preset;
+            if (preset === 'custom') {
+                customRange.style.display = 'flex';
+            } else {
+                customRange.style.display = 'none';
+                // Clear date inputs so the server uses the preset (or no filter for All-time)
+                document.getElementById('date_from').value = '';
+                document.getElementById('date_to').value = '';
+                form.submit();
+            }
+        });
+    });
+})();
+</script>
+{% endmacro %}

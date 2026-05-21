@@ -1,11 +1,13 @@
 {% extends "base.html" %}
+{% from "components/date_filter.html" import date_filter_card %}
+{% from "components/work_items_table.html" import render_work_items_table %}
 
 {% block title %}Team | TelReach GitHub Dashboard{% endblock %}
 
 {% block content %}
 
 <div class="summary-header mb-4">
-    <h1 class="h3 mb-1"><i class="fas fa-users mr-2"></i>Team Workload</h1>
+    <h1 class="h3 mb-1">Team Workload</h1>
     <p class="text-muted mb-0">Issues assigned and PRs created across repositories, per team member.</p>
 </div>
 
@@ -17,46 +19,49 @@
 </div>
 {% elif team_stats %}
 
-<!-- Summary row -->
+<!-- Date filter (shared component) -->
+{{ date_filter_card(date_preset, date_from, date_to, url_for('team')) }}
+
+<!-- Summary row — team-specific metrics from filtered data -->
+{% set ns = namespace(issues=0, prs=0, reviewing=0, repos=[]|list) %}
+{% for m in team_stats.members %}
+    {% set ns.issues = ns.issues + m.issues_assigned|length %}
+    {% set ns.prs = ns.prs + m.prs_authored|length %}
+    {% set ns.reviewing = ns.reviewing + m.prs_reviewing|length %}
+    {% for r in m.repos_active %}
+        {% if r not in ns.repos %}{% set _ = ns.repos.append(r) %}{% endif %}
+    {% endfor %}
+{% endfor %}
 <div class="row mb-4">
-    <div class="col-md-3 mb-3">
-        <div class="card summary-card h-100">
-            <div class="card-body text-center">
-                <div class="summary-metric">{{ team_stats.members|length }}</div>
-                <div class="summary-label">Team Members</div>
-            </div>
-        </div>
-    </div>
     <div class="col-md-3 mb-3">
         <div class="card summary-card h-100" style="border-top-color: #22c55e;">
             <div class="card-body text-center">
-                <div class="summary-metric" style="color: #16a34a;">{{ team_stats.total_issues }}</div>
-                <div class="summary-label">Open Issues (all repos)</div>
+                <div class="summary-metric" style="color: #16a34a;">{{ ns.issues }}</div>
+                <div class="summary-label">Issues Assigned</div>
             </div>
         </div>
     </div>
     <div class="col-md-3 mb-3">
         <div class="card summary-card h-100" style="border-top-color: #8b5cf6;">
             <div class="card-body text-center">
-                <div class="summary-metric" style="color: #7c3aed;">{{ team_stats.total_prs }}</div>
-                <div class="summary-label">Open PRs (all repos)</div>
+                <div class="summary-metric" style="color: #7c3aed;">{{ ns.prs }}</div>
+                <div class="summary-label">PRs Authored</div>
             </div>
         </div>
     </div>
     <div class="col-md-3 mb-3">
         <div class="card summary-card h-100" style="border-top-color: #f59e0b;">
             <div class="card-body text-center">
-                {% set total_assigned = team_stats.members|sum(attribute='issues_assigned')|int %}
-                {% set total_authored = team_stats.members|sum(attribute='prs_authored')|int %}
-                <div class="summary-metric" style="color: #d97706;">
-                    {{ namespace(total=0) }}
-                    {% set ns = namespace(total=0) %}
-                    {% for m in team_stats.members %}
-                        {% set ns.total = ns.total + m.issues_assigned|length + m.prs_authored|length %}
-                    {% endfor %}
-                    {{ ns.total }}
-                </div>
-                <div class="summary-label">Team Items Owned</div>
+                <div class="summary-metric" style="color: #d97706;">{{ ns.reviewing }}</div>
+                <div class="summary-label">PRs Reviewing</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card summary-card h-100" style="border-top-color: #0ea5e9;">
+            <div class="card-body text-center">
+                <div class="summary-metric" style="color: #0284c7;">{{ ns.repos|length }}</div>
+                <div class="summary-label">Repos Active</div>
             </div>
         </div>
     </div>
@@ -65,7 +70,7 @@
 <!-- Team overview table -->
 <div class="card shadow-sm mb-4">
     <div class="card-header">
-        <i class="fas fa-chart-bar mr-2"></i>Team Overview
+        Team Overview
     </div>
     <div class="card-body p-0">
         <table class="table table-hover mb-0">
@@ -108,27 +113,30 @@
     </div>
 </div>
 
-<!-- Per-member detail cards -->
+<!-- Per-member detail cards (collapsible) -->
 {% for member in team_stats.members %}
 <div class="card shadow-sm mb-4 team-detail-card" id="member-{{ member.handle }}">
-    <div class="card-header d-flex justify-content-between align-items-center">
+    <div class="card-header d-flex justify-content-between align-items-center" style="cursor:pointer;" data-toggle="collapse" data-target="#collapse-{{ member.handle }}" aria-expanded="false" aria-controls="collapse-{{ member.handle }}">
         <span>
+            <span class="collapse-icon mr-2" style="transition:transform .2s;font-size:.75rem;display:inline-block;">&#9656;</span>
             <img class="avatar-sm" src="https://github.com/{{ member.handle }}.png?size=40" alt="">
-            <a href="https://github.com/{{ member.handle }}" target="_blank" class="font-weight-bold ml-1">@{{ member.handle }}</a>
+            <a href="https://github.com/{{ member.handle }}" target="_blank" class="font-weight-bold ml-1" onclick="event.stopPropagation();">@{{ member.handle }}</a>
+            <span class="text-muted small ml-2">{{ member.issues_assigned|length }} issues · {{ member.prs_authored|length }} PRs</span>
         </span>
         <span class="text-muted small">{{ member.repos_active|length }} repo{{ 's' if member.repos_active|length != 1 }}</span>
     </div>
+    <div class="collapse" id="collapse-{{ member.handle }}">
     <div class="card-body">
+        <!-- Repo breakdown -->
         <div class="row">
-            <!-- Issues by repo -->
             <div class="col-md-6 mb-3">
-                <h6 class="text-muted mb-2"><i class="fas fa-exclamation-circle mr-1" style="color:#16a34a;"></i>Issues Assigned ({{ member.issues_assigned|length }})</h6>
+                <h6 class="text-muted mb-2">Issues by Repo</h6>
                 {% if member.issues_by_repo %}
                 <table class="table table-sm table-borderless mb-0">
                     {% for repo, count in member.issues_by_repo.items() %}
                     <tr>
                         <td>
-                            <a href="{{ url_for('dashboard', repo=repo, type='issues', state='open') }}">{{ repo.split('/')[-1] }}</a>
+                            <a href="{{ url_for('dashboard', repo=repo, type='issues', state='open', assignee=member.handle, date_preset=date_preset, date_from=date_from, date_to=date_to) }}">{{ repo.split('/')[-1] }}</a>
                             <br><small class="text-muted">{{ repo }}</small>
                         </td>
                         <td class="text-right align-middle" style="width:60px;">
@@ -141,16 +149,14 @@
                 <p class="text-muted small mb-0">No issues assigned.</p>
                 {% endif %}
             </div>
-
-            <!-- PRs by repo -->
             <div class="col-md-6 mb-3">
-                <h6 class="text-muted mb-2"><i class="fas fa-code-branch mr-1" style="color:#7c3aed;"></i>PRs Authored ({{ member.prs_authored|length }})</h6>
+                <h6 class="text-muted mb-2">PRs by Repo</h6>
                 {% if member.prs_by_repo %}
                 <table class="table table-sm table-borderless mb-0">
                     {% for repo, count in member.prs_by_repo.items() %}
                     <tr>
                         <td>
-                            <a href="{{ url_for('dashboard', repo=repo, type='prs', state='open') }}">{{ repo.split('/')[-1] }}</a>
+                            <a href="{{ url_for('dashboard', repo=repo, type='prs', state='open', author=member.handle, date_preset=date_preset, date_from=date_from, date_to=date_to) }}">{{ repo.split('/')[-1] }}</a>
                             <br><small class="text-muted">{{ repo }}</small>
                         </td>
                         <td class="text-right align-middle" style="width:60px;">
@@ -165,79 +171,16 @@
             </div>
         </div>
 
-        <!-- Items list: recent issues -->
         {% if member.issues_assigned %}
-        <h6 class="text-muted mt-2 mb-2"><i class="fas fa-list mr-1"></i>Assigned Issues</h6>
-        <div class="table-responsive">
-            <table class="table table-sm mb-0">
-                <thead class="thead-light">
-                    <tr>
-                        <th>Title</th>
-                        <th style="width:200px;">Repository</th>
-                        <th class="text-center" style="width:80px;">State</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for issue in member.issues_assigned[:15] %}
-                    <tr>
-                        <td>
-                            <a href="{{ issue.html_url or issue.url or '#' }}" target="_blank">
-                                {{ issue.title or 'Untitled' }}
-                            </a>
-                        </td>
-                        <td class="text-muted small">{{ issue.repo }}</td>
-                        <td class="text-center">
-                            <span class="badge badge-{{ 'success' if issue.state == 'open' else 'secondary' }}">{{ issue.state }}</span>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                    {% if member.issues_assigned|length > 15 %}
-                    <tr><td colspan="3" class="text-muted text-center small">+ {{ member.issues_assigned|length - 15 }} more</td></tr>
-                    {% endif %}
-                </tbody>
-            </table>
-        </div>
+        <h6 class="text-muted mt-2 mb-2">Assigned Issues</h6>
+        {{ render_work_items_table(none, member.issues_assigned, 'issues', compact=true) }}
         {% endif %}
 
-        <!-- Items list: recent PRs -->
         {% if member.prs_authored %}
-        <h6 class="text-muted mt-3 mb-2"><i class="fas fa-code-branch mr-1"></i>Authored PRs</h6>
-        <div class="table-responsive">
-            <table class="table table-sm mb-0">
-                <thead class="thead-light">
-                    <tr>
-                        <th>Title</th>
-                        <th style="width:200px;">Repository</th>
-                        <th class="text-center" style="width:80px;">State</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for pr in member.prs_authored[:15] %}
-                    <tr>
-                        <td>
-                            <a href="{{ pr.html_url or pr.url or '#' }}" target="_blank">
-                                {{ pr.title or 'Untitled' }}
-                            </a>
-                        </td>
-                        <td class="text-muted small">{{ pr.repo }}</td>
-                        <td class="text-center">
-                            {% if pr.merged or pr.merged_at %}
-                            <span class="badge" style="background:#8b5cf6;color:#fff;">merged</span>
-                            {% elif pr.draft %}
-                            <span class="badge badge-secondary">draft</span>
-                            {% else %}
-                            <span class="badge badge-success">open</span>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                    {% if member.prs_authored|length > 15 %}
-                    <tr><td colspan="3" class="text-muted text-center small">+ {{ member.prs_authored|length - 15 }} more</td></tr>
-                    {% endif %}
-                </tbody>
-            </table>
-        </div>
+        <h6 class="text-muted mt-3 mb-2">Authored PRs</h6>
+        {{ render_work_items_table(none, member.prs_authored, 'prs', compact=true) }}
         {% endif %}
+    </div>
     </div>
 </div>
 {% endfor %}
@@ -245,20 +188,45 @@
 {% endif %}
 {% endblock %}
 
+{% block extra_head %}
+{{ super() }}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/work_items_table.css') }}">
+{% endblock %}
+
 {% block extra_scripts %}
 {{ super() }}
+<script src="{{ url_for('static', filename='js/work_items_table.js') }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Initialize age formatting across all tables on the page
+    if (window.WorkItemsTable && typeof window.WorkItemsTable.init === 'function') {
+        window.WorkItemsTable.init();
+    }
+
+    // Clicking a row in the overview table expands/scrolls to that member's detail card
     document.querySelectorAll('.team-member-row').forEach(function(row) {
         row.style.cursor = 'pointer';
         row.addEventListener('click', function() {
             var target = document.querySelector(row.dataset.target);
             if (target) {
+                var collapseEl = target.querySelector('.collapse');
+                if (collapseEl && !collapseEl.classList.contains('show')) {
+                    $(collapseEl).collapse('show');
+                }
                 target.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 target.classList.add('highlight-flash');
                 setTimeout(function() { target.classList.remove('highlight-flash'); }, 1500);
             }
         });
+    });
+
+    // Rotate chevron icon on collapse toggle
+    document.querySelectorAll('.team-detail-card .collapse').forEach(function(el) {
+        var header = el.previousElementSibling || el.closest('.card').querySelector('.card-header');
+        var icon = header ? header.querySelector('.collapse-icon') : null;
+        if (!icon) return;
+        $(el).on('show.bs.collapse', function() { icon.style.transform = 'rotate(90deg)'; });
+        $(el).on('hide.bs.collapse', function() { icon.style.transform = 'rotate(0deg)'; });
     });
 });
 </script>

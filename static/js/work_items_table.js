@@ -55,11 +55,9 @@
         if (idx >= 0) {
             list.splice(idx, 1);
             button.classList.remove('active');
-            button.querySelector('i').className = 'far fa-bookmark';
         } else {
             list.push({ key, dataType: type, repo, repoDisplay, number, title, state, url, updatedAt, createdAt });
             button.classList.add('active');
-            button.querySelector('i').className = 'fas fa-bookmark';
         }
 
         persistFollowed(list);
@@ -72,7 +70,6 @@
             const key = buildKey(btn.dataset.type, btn.dataset.repo, btn.dataset.number);
             if (set.has(key)) {
                 btn.classList.add('active');
-                btn.querySelector('i').className = 'fas fa-bookmark';
             }
             btn.addEventListener('click', (e) => {
                 e.preventDefault();
@@ -112,16 +109,31 @@
             if (!Number.isFinite(ts)) return;
             el.textContent = timeAgo(raw);
             el.title = raw;
+
+            // Cell-level recency coloring
+            const cell = el.closest('td');
+            const ageDays = (now - ts) / DAY;
+            if (cell) {
+                if (ageDays <= 1) {
+                    cell.classList.add('age-cell', 'age-cell--today');
+                } else if (ageDays <= 7) {
+                    cell.classList.add('age-cell', 'age-cell--week');
+                } else if (ageDays <= 30) {
+                    cell.classList.add('age-cell', 'age-cell--month');
+                } else if (ageDays <= 90) {
+                    cell.classList.add('age-cell', 'age-cell--stale');
+                } else {
+                    cell.classList.add('age-cell', 'age-cell--old');
+                }
+            }
+
             // Stale highlighting on the row
             const row = el.closest('tr');
             if (!row) return;
-            const ageDays = (now - ts) / DAY;
             if (ageDays > 90) {
                 row.setAttribute('data-stale', 'danger');
-                el.insertAdjacentHTML('afterend', ' <span class="stale-badge stale-badge--danger">90d+</span>');
             } else if (ageDays > 30) {
                 row.setAttribute('data-stale', 'warning');
-                el.insertAdjacentHTML('afterend', ' <span class="stale-badge stale-badge--warning">30d+</span>');
             }
         });
     }
@@ -181,9 +193,10 @@
         filterSelects.forEach((select) => {
             const field = select.dataset.filterField;
             if (!field) return;
-            const urlVal = urlParams.get('f_' + field);
+            // Check both f_<field> (client-side) and <field> (server-side) URL params
+            const urlVal = urlParams.get('f_' + field) || urlParams.get(field);
             if (urlVal) {
-                activeFilters[field] = urlVal;
+                activeFilters[field] = urlVal.toLowerCase();
             }
         });
 
@@ -201,7 +214,7 @@
             if (!urlParams.has('repo')) return;
             const u = new URLSearchParams(window.location.search);
             // Preserve server-side params
-            const keep = ['repo', 'type', 'state'];
+            const keep = ['repo', 'type', 'state', 'author', 'assignee', 'date_preset', 'date_from', 'date_to'];
             const newParams = new URLSearchParams();
             keep.forEach((k) => { if (u.has(k)) newParams.set(k, u.get(k)); });
             if (searchQuery) newParams.set('q', searchQuery);
@@ -242,8 +255,8 @@
                 syncUrl();
             });
             // Set dropdown value from URL
-            const urlVal = urlParams.get('f_' + field);
-            if (urlVal) select.value = urlVal;
+            const urlVal2 = urlParams.get('f_' + field) || urlParams.get(field);
+            if (urlVal2) select.value = urlVal2.toLowerCase();
         });
 
         function applySort(list) {
@@ -359,8 +372,6 @@
                 if (!modal) return;
 
                 // Title
-                const typeIcon = data.itemType === 'prs' ? '<i class="fas fa-code-branch mr-2"></i>' : '<i class="fas fa-dot-circle mr-2"></i>';
-                modal.querySelector('#modal-type-icon').innerHTML = typeIcon;
                 modal.querySelector('#modal-title-text').textContent = data.itemTitle || 'Untitled';
 
                 // Number
@@ -372,16 +383,16 @@
                 if (data.itemType === 'prs') {
                     if (data.itemMerged) {
                         stateBadge.className = 'badge badge-pr-merged';
-                        stateBadge.innerHTML = '<i class="fas fa-code-merge mr-1"></i>Merged';
+                        stateBadge.textContent = 'Merged';
                     } else if (data.itemDraft === 'True') {
                         stateBadge.className = 'badge badge-pr-draft';
-                        stateBadge.innerHTML = '<i class="fas fa-pencil-alt mr-1"></i>Draft';
+                        stateBadge.textContent = 'Draft';
                     } else if (state === 'open') {
                         stateBadge.className = 'badge badge-pr-open';
-                        stateBadge.innerHTML = '<i class="fas fa-code-branch mr-1"></i>Open';
+                        stateBadge.textContent = 'Open';
                     } else {
                         stateBadge.className = 'badge badge-pr-closed';
-                        stateBadge.innerHTML = '<i class="fas fa-times-circle mr-1"></i>Closed';
+                        stateBadge.textContent = 'Closed';
                     }
                 } else {
                     if (state === 'open') {
@@ -476,9 +487,10 @@
 
     window.WorkItemsTable = {
         init() {
+            // Apply age formatting to ALL tables on the page (including team detail tables)
+            applyAgeAndStale(document);
             const tables = document.querySelectorAll('.work-items-table');
             tables.forEach((container) => {
-                applyAgeAndStale(container);
                 hydrateButtons(container);
                 initTable(container);
                 initRowModals(container);

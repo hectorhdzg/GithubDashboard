@@ -41,7 +41,7 @@
     }
 
     function renderEmptyState() {
-        container.innerHTML = '<div class="alert alert-info mb-0">No followed items yet. Visit a repository page and click the follow icon to add one.</div>';
+        container.innerHTML = '<div class="alert alert-info mb-0">No followed items yet. Visit a repository page and click the follow button to add one.</div>';
     }
 
     function renderTable(items) {
@@ -65,7 +65,6 @@
                                 data-url="${url}"
                                 data-updated="${item.updatedAt || ''}"
                                 data-created="${item.createdAt || ''}">
-                                <i class="fas fa-bookmark"></i>
                             </button>
                         </td>
                         <td data-field="number" data-value="${item.number || 0}"><a href="${url}" target="_blank">#${item.number}</a></td>
@@ -89,7 +88,7 @@
                     <table class="table table-striped table-hover align-middle">
                         <thead class="thead-light">
                             <tr>
-                                <th scope="col" class="text-nowrap follow-cell"><i class="fas fa-bookmark"></i></th>
+                                <th scope="col" class="text-nowrap follow-cell">Follow</th>
                                 <th scope="col" class="text-nowrap sortable" data-sort-key="number">#</th>
                                 <th scope="col" class="sortable" data-sort-key="title" style="min-width: 260px;">Title</th>
                                 <th scope="col" class="sortable" data-sort-key="state">State</th>
@@ -103,10 +102,7 @@
                                 <th></th>
                                 <th colspan="6" class="p-1">
                                     <div class="input-group input-group-sm work-items-search-group">
-                                        <div class="input-group-prepend">
-                                            <span class="input-group-text"><i class="fas fa-search"></i></span>
-                                        </div>
-                                        <input type="search" class="form-control work-items-search" placeholder="Search title, repo, state...">
+                                    <input type="search" class="form-control work-items-search" placeholder="Search title, repo, state...">
                                     </div>
                                 </th>
                             </tr>

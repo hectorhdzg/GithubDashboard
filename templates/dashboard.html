@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "components/work_items_table.html" import render_work_items_table %}
 {% from "components/navbar.html" import count_open %}
+{% from "components/date_filter.html" import date_filter_card %}
 
 {% block title %}Dashboard | GitHub Issues Dashboard{% endblock %}
 
@@ -13,18 +14,20 @@
 
 {% if sync_error %}
     <div class="alert alert-warning">
-        <strong>Sync service unavailable.</strong> The dashboard could not reach
-        <code>{{ sync_base_url }}</code>. Latest error: {{ sync_error }}.
-        Check that the service is online and <code>SYNC_SERVICE_URL</code> points to the correct endpoint.
+        <strong>Unable to load data.</strong> The data service is currently unreachable.
+        Please try again in a few moments.
     </div>
 {% endif %}
 
 {% if not active_repo %}
     <!-- Summary Overview -->
     <div class="summary-header mb-4">
-        <h1 class="h3 mb-1"><i class="fas fa-tachometer-alt mr-2"></i>Dashboard Overview</h1>
+        <h1 class="h3 mb-1">Dashboard Overview</h1>
         <p class="text-muted mb-0">Select a repository from the navigation bar, or browse the summary below.</p>
     </div>
+
+    <!-- Date filter (shared component) -->
+    {{ date_filter_card(date_preset, date_from, date_to, url_for('dashboard')) }}
 
     {% if all_repositories %}
     <div class="row mb-4">
@@ -56,7 +59,7 @@
 
     <div class="card shadow-sm mb-4">
         <div class="card-header d-flex justify-content-between align-items-center">
-            <span><i class="fas fa-fire mr-2"></i>Most Active Repositories</span>
+            <span>Most Active Repositories</span>
             <span class="badge badge-secondary">{{ all_repositories|length }} total</span>
         </div>
         <div class="card-body p-0">
@@ -72,13 +75,18 @@
                 </thead>
                 <tbody>
                     {% for repo in all_repositories|sort(attribute='open_items_total', reverse=true) %}
-                    {% set ri = count_open(repo, 'issues')|int %}
-                    {% set rp = count_open(repo, 'prs')|int %}
+                    {% if repo_issue_counts is defined and repo_issue_counts %}
+                        {% set ri = repo_issue_counts.get(repo.repo, 0) %}
+                        {% set rp = repo_pr_counts.get(repo.repo, 0) %}
+                    {% else %}
+                        {% set ri = count_open(repo, 'issues')|int %}
+                        {% set rp = count_open(repo, 'prs')|int %}
+                    {% endif %}
                     {% set rt = ri + rp %}
                     {% if rt > 0 %}
                     <tr>
                         <td>
-                            <a href="{{ url_for('dashboard', repo=repo.repo, type='issues', state='open') }}" class="font-weight-bold">
+                            <a href="{{ url_for('dashboard', repo=repo.repo, type='issues', state='open', date_preset=date_preset, date_from=date_from, date_to=date_to) }}" class="font-weight-bold">
                                 {{ repo.display_name or repo.repo }}
                             </a>
                             <br><small class="text-muted">{{ repo.repo }}</small>
@@ -112,10 +120,6 @@
     {% endif %}
 {% else %}
     {% set banner_color = category_color(active_repo.main_category) if active_repo and active_repo.main_category is defined else '#0d6efd' %}
-    {% set open_issues = count_open(active_repo, 'issues')|int %}
-    {% set open_prs = count_open(active_repo, 'prs')|int %}
-    {% set open_total = open_issues + open_prs %}
-    {% set closed_total = state_counts['closed'] if state_counts is defined else 0 %}
 
     <div class="repo-strip mb-3" style="--banner-color: {{ banner_color }};">
         <div class="repo-strip__left">
@@ -123,19 +127,27 @@
                 <span class="repo-name">{{ active_repo.display_name or active_repo.repo }}</span>
                 <span class="repo-id text-muted">{{ active_repo.repo }}</span>
             </div>
-            <div class="repo-strip__meta text-muted">
-                <a class="meta-chip meta-chip--open{% if state == 'open' %} meta-chip--active{% endif %}" href="{{ url_for('dashboard', repo=selected_repo, type=data_type, state='open') }}">Open {{ open_total }}</a>
-                <a class="meta-chip meta-chip--closed{% if state == 'closed' %} meta-chip--active{% endif %}" href="{{ url_for('dashboard', repo=selected_repo, type=data_type, state='closed') }}">Closed {{ closed_total }}</a>
-                <a class="meta-chip meta-chip--issues{% if data_type == 'issues' %} meta-chip--active{% endif %}" href="{{ url_for('dashboard', repo=selected_repo, type='issues', state=state) }}">Issues {{ open_issues }}</a>
-                <a class="meta-chip meta-chip--prs{% if data_type == 'prs' %} meta-chip--active{% endif %}" href="{{ url_for('dashboard', repo=selected_repo, type='prs', state=state) }}">PRs {{ open_prs }}</a>
-            </div>
         </div>
         <div class="repo-strip__controls">
             <a class="btn btn-link btn-sm ml-2 repo-strip__github" href="https://github.com/{{ active_repo.repo }}" target="_blank" title="Open on GitHub">
-                <i class="fab fa-github"></i>
+                GitHub
             </a>
         </div>
     </div>
+
+    <!-- Filter bar (shared component) -->
+    {% set hidden_fields = {"repo": selected_repo} %}
+    {% if filter_author %}{% set _ = hidden_fields.update({"author": filter_author}) %}{% endif %}
+    {% if filter_assignee %}{% set _ = hidden_fields.update({"assignee": filter_assignee}) %}{% endif %}
+    {% set clear_base = url_for('dashboard', repo=selected_repo, type=data_type, state=state, date_preset=date_preset, date_from=date_from, date_to=date_to) %}
+    {% set filters = [] %}
+    {% if filter_author %}
+        {% set _ = filters.append({"label": "Author", "value": "@" ~ filter_author, "color": "#5b21b6", "bg": "#ede9fe", "icon": "", "clear_url": clear_base ~ ("&assignee=" ~ filter_assignee if filter_assignee else "")}) %}
+    {% endif %}
+    {% if filter_assignee %}
+        {% set _ = filters.append({"label": "Assignee", "value": "@" ~ filter_assignee, "color": "#166534", "bg": "#dcfce7", "icon": "", "clear_url": clear_base ~ ("&author=" ~ filter_author if filter_author else "")}) %}
+    {% endif %}
+    {{ date_filter_card(date_preset, date_from, date_to, url_for('dashboard'), hidden_fields, show_all_time=true, active_filters=filters, show_type_state=true, current_type=data_type, current_state=state) }}
 
     {% if data_error %}
         <div class="alert alert-warning">{{ data_error }}</div>
